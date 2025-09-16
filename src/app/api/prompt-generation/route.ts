@@ -27,52 +27,28 @@ class GrokAPIClient {
     };
   }
 
-  async evaluateImageDualPrompts(
+  async evaluateImagePrompt(
     imageUrl: string,
-    tagInitialPrompt?: string,
-    enhancingTagPrompt?: string,
+    tagPrompt?: string,
     context: string = "",
     model: string = "grok-2-vision-latest",
     detail: string = "high"
-  ): Promise<{ tag_initial_response: GrokAPIResponse; enhancing_tag_response: GrokAPIResponse }> {
+  ): Promise<GrokAPIResponse> {
     
-    // Use system prompts from enum structure
-    const defaultTagInitialPrompt = SYSTEM_PROMPTS[SystemPromptType.TAG_INITIAL_GENERATION];
-    const defaultEnhancingPrompt = SYSTEM_PROMPTS[SystemPromptType.ENHANCING_TAG_PROMPT];
+    // Use system prompt from enum structure
+    const defaultTagPrompt = SYSTEM_PROMPTS[SystemPromptType.TAG_INITIAL_GENERATION];
+    const finalTagPrompt = tagPrompt || defaultTagPrompt;
 
-    const finalTagInitialPrompt = tagInitialPrompt || defaultTagInitialPrompt;
-    const finalEnhancingPrompt = enhancingTagPrompt || defaultEnhancingPrompt;
-
-    // First request - tag initial generation
-    const tagInitialResponse = await this.evaluateImage(
+    // Generate initial prompt
+    const response = await this.evaluateImage(
       imageUrl,
-      finalTagInitialPrompt,
+      finalTagPrompt,
       context,
       model,
       detail
     );
 
-    // Extract content from initial response
-    let initialContent = "";
-    if (tagInitialResponse.choices && tagInitialResponse.choices.length > 0) {
-      initialContent = tagInitialResponse.choices[0].message.content;
-    }
-
-    // Second request with enhanced prompt including previous result
-    const enhancedPrompt = `${finalEnhancingPrompt}\n\nPrevious tag analysis result:\n${initialContent}`;
-    
-    const enhancingTagResponse = await this.evaluateImage(
-      imageUrl,
-      enhancedPrompt,
-      context,
-      model,
-      detail
-    );
-
-    return {
-      tag_initial_response: tagInitialResponse,
-      enhancing_tag_response: enhancingTagResponse
-    };
+    return response;
   }
 
   private async evaluateImage(
@@ -184,20 +160,22 @@ export async function POST(request: Request) {
 
     const airtableData = await airtableResponse.json();
     
-    // Filter records that need prompt generation (only have reference fields filled)
-    const PROMPT_GEN_COLUMNS = [
-      'initial_prompt', 'enhanced_prompt', 'edited_prompt', 'selected_characters', 'status',
-      'initial_prompt_image_1', 'initial_prompt_image_2', 'initial_prompt_image_3',
-      'enhanced_prompt_image_1', 'enhanced_prompt_image_2', 'enhanced_prompt_image_3',
-      'edited_prompt_image_1', 'edited_prompt_image_2', 'edited_prompt_image_3',
-      'edited_prompt_image_4', 'edited_prompt_image_5'
-    ];
-
+    // Filter records that need prompt generation (must have reference image but no prompts yet)
     const recordsNeedingPrompts = airtableData.records.filter((record: any) => {
-      return PROMPT_GEN_COLUMNS.every(column => {
-        const value = record.fields[column];
-        return !value || (typeof value === 'string' && value.trim() === '');
-      });
+      // Must have reference image
+      const hasReference = record.fields.reference_image_attached && 
+                          Array.isArray(record.fields.reference_image_attached) && 
+                          record.fields.reference_image_attached.length > 0;
+      
+      // Must NOT have initial_prompt yet
+      const hasInitialPrompt = record.fields.initial_prompt && 
+                              record.fields.initial_prompt.trim() !== '';
+      
+      // Check if status allows prompt generation (not currently processing)
+      const status = record.fields.status || '';
+      const isProcessing = status === 'initial_request_sent' || status === 'prompt_generating';
+      
+      return hasReference && !hasInitialPrompt && !isProcessing;
     });
 
     if (recordsNeedingPrompts.length === 0) {
@@ -225,31 +203,24 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // Generate prompts using Grok API
-        const grokResponse = await grokClient.evaluateImageDualPrompts(
+        // Generate prompt using Grok API
+        const grokResponse = await grokClient.evaluateImagePrompt(
           imageUrl,
-          undefined, // Use default prompts
-          undefined,
+          undefined, // Use default prompt
           `Reference: ${record.fields.reference_image || ''}` // Add reference context
         );
 
         // Extract prompt content
         let initialPrompt = '';
-        let enhancedPrompt = '';
 
-        if (grokResponse.tag_initial_response.choices && grokResponse.tag_initial_response.choices.length > 0) {
-          initialPrompt = grokResponse.tag_initial_response.choices[0].message.content;
+        if (grokResponse.choices && grokResponse.choices.length > 0) {
+          initialPrompt = grokResponse.choices[0].message.content;
         }
 
-        if (grokResponse.enhancing_tag_response.choices && grokResponse.enhancing_tag_response.choices.length > 0) {
-          enhancedPrompt = grokResponse.enhancing_tag_response.choices[0].message.content;
-        }
-
-        // Update the record in Airtable with generated prompts
+        // Update the record in Airtable with generated prompt
         const updatePayload = {
           fields: {
             initial_prompt: initialPrompt,
-            enhanced_prompt: enhancedPrompt,
             status: 'prompt_generated'
           }
         };
@@ -270,8 +241,7 @@ export async function POST(request: Request) {
         results.push({
           recordId: record.id,
           status: 'success',
-          initialPrompt,
-          enhancedPrompt
+          initialPrompt
         });
 
       } catch (error) {

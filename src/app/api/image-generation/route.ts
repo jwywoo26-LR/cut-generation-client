@@ -156,9 +156,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (!['initial', 'enhanced'].includes(generationType)) {
+    if (generationType !== 'initial') {
       return NextResponse.json(
-        { error: 'Generation type must be "initial" or "enhanced"' },
+        { error: 'Generation type must be "initial"' },
         { status: 400 }
       );
     }
@@ -196,13 +196,17 @@ export async function POST(request: Request) {
     const airtableData = await airtableResponse.json();
     
     // Filter records that need image generation
-    const promptField = generationType === 'initial' ? 'initial_prompt' : 'enhanced_prompt';
+    const promptField = 'initial_prompt';
     const imageFields: string[] = [];
-    const baseFieldName = generationType === 'initial' ? 'initial_prompt_image' : 'enhanced_prompt_image';
     
-    // Generate field names based on imageCount (e.g., initial_prompt_image_1, initial_prompt_image_2, etc.)
-    for (let i = 1; i <= imageCount; i++) {
-      imageFields.push(`${baseFieldName}_${i}`);
+    if (imageCount === 1) {
+      // Single image goes to initial_prompt_image
+      imageFields.push('initial_prompt_image');
+    } else {
+      // Multiple images go to initial_prompt_image_1, initial_prompt_image_2, etc.
+      for (let i = 1; i <= imageCount; i++) {
+        imageFields.push(`initial_prompt_image_${i}`);
+      }
     }
 
     const recordsNeedingImages = airtableData.records.filter((record: any) => {
@@ -212,16 +216,9 @@ export async function POST(request: Request) {
       // Check status field to prevent duplicate requests
       const status = record.fields.status || '';
       
-      if (generationType === 'initial') {
-        // Block if initial_request_sent or enhanced_request_sent
-        if (status === 'initial_request_sent' || status === 'enhanced_request_sent') {
-          return false;
-        }
-      } else if (generationType === 'enhanced') {
-        // Block if enhanced_request_sent (but allow if initial_request_sent)
-        if (status === 'enhanced_request_sent') {
-          return false;
-        }
+      // Block if initial_request_sent
+      if (status === 'initial_request_sent') {
+        return false;
       }
       
       return hasPrompt && missingImages;
@@ -237,7 +234,7 @@ export async function POST(request: Request) {
     const results = [];
     
     // First, update status for all records to prevent duplicate requests
-    const statusValue = generationType === 'initial' ? 'initial_request_sent' : 'enhanced_request_sent';
+    const statusValue = 'initial_request_sent';
     
     for (const record of recordsNeedingImages) {
       try {

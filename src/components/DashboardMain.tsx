@@ -5,11 +5,10 @@ import {
   DashboardOverview,
   PromptGeneration,
   InitialImageGeneration,
-  EnhancedImageGeneration,
   FinalImageGeneration
 } from './dashboard';
 
-type TabType = 'dashboard' | 'prompt_gen' | 'initial_img_gen' | 'enhanced_img_gen' | 'final_img_gen';
+type TabType = 'dashboard' | 'prompt_gen' | 'initial_img_gen' | 'final_img_gen';
 
 interface DashboardProps {
   currentTable?: string;
@@ -23,7 +22,6 @@ export default function DashboardMain({ currentTable, onPromptGenerated }: Dashb
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: '📊' },
     { id: 'prompt_gen' as TabType, label: 'Prompt Generation', icon: '✍️' },
     { id: 'initial_img_gen' as TabType, label: 'Initial Image Gen', icon: '🎨' },
-    { id: 'enhanced_img_gen' as TabType, label: 'Enhanced Image Gen', icon: '✨' },
     { id: 'final_img_gen' as TabType, label: 'Final Image Gen', icon: '🖼️' }
   ];
 
@@ -35,8 +33,6 @@ export default function DashboardMain({ currentTable, onPromptGenerated }: Dashb
         return <PromptGeneration currentTable={currentTable} onPromptGenerated={onPromptGenerated} />;
       case 'initial_img_gen':
         return <InitialImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} />;
-      case 'enhanced_img_gen':
-        return <EnhancedImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} />;
       case 'final_img_gen':
         return <FinalImageGeneration />;
       default:

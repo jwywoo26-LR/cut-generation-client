@@ -162,39 +162,46 @@ export default function EditableCell({
       const isSelectedCharacters = fieldKey.toLowerCase() === 'selected_characters';
       const isEmpty = !value || String(value).trim() === '';
       
-      // Show copy buttons for empty edited_prompt field
-      if (isEditedPrompt && isEmpty) {
+      // Show copy buttons and content for edited_prompt field
+      if (isEditedPrompt) {
         const initialPrompt = String(recordFields['initial_prompt'] || '');
-        const enhancedPrompt = String(recordFields['enhanced_prompt'] || '');
         
         return (
           <div className="flex flex-col gap-2">
-            <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
-              Copy from:
-            </div>
+            {/* Show current value if it exists */}
+            {!isEmpty && (
+              <div className="p-2 bg-gray-50 dark:bg-gray-700 rounded border">
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-1">Current edited prompt:</div>
+                <div 
+                  className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-600 px-1 py-0.5 rounded text-sm"
+                  onClick={handleEdit}
+                  title="Click to edit"
+                >
+                  {String(value)}
+                </div>
+              </div>
+            )}
+            
+            {/* Copy from initial prompt button */}
             {initialPrompt && (
-              <button
-                onClick={() => handleCopyPrompt('initial_prompt')}
-                className="px-2 py-1 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-800 dark:text-blue-200 rounded border border-blue-300 dark:border-blue-700 text-left"
-              >
-                <div className="font-medium">Initial</div>
-                <div className="text-xs opacity-75">
-                  {initialPrompt.slice(0, 40)}...
+              <div>
+                <div className="text-xs text-gray-500 dark:text-gray-400 mb-2">
+                  Copy from Initial Prompt:
                 </div>
-              </button>
+                <button
+                  onClick={() => handleCopyPrompt('initial_prompt')}
+                  className="px-3 py-2 text-xs bg-blue-100 hover:bg-blue-200 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-800 dark:text-blue-200 rounded border border-blue-300 dark:border-blue-700 text-left w-full"
+                >
+                  <div className="font-medium mb-1">📋 Copy Initial Prompt</div>
+                  <div className="text-xs opacity-75 break-words">
+                    {initialPrompt.length > 60 ? `${initialPrompt.slice(0, 60)}...` : initialPrompt}
+                  </div>
+                </button>
+              </div>
             )}
-            {enhancedPrompt && (
-              <button
-                onClick={() => handleCopyPrompt('enhanced_prompt')}
-                className="px-2 py-1 text-xs bg-green-100 hover:bg-green-200 dark:bg-green-900 dark:hover:bg-green-800 text-green-800 dark:text-green-200 rounded border border-green-300 dark:border-green-700 text-left"
-              >
-                <div className="font-medium">Enhanced</div>
-                <div className="text-xs opacity-75">
-                  {enhancedPrompt.slice(0, 40)}...
-                </div>
-              </button>
-            )}
-            {!initialPrompt && !enhancedPrompt && (
+            
+            {/* Fallback for empty states */}
+            {isEmpty && !initialPrompt && (
               <div 
                 className="cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 px-1 py-0.5 rounded text-gray-500 dark:text-gray-400"
                 onClick={handleEdit}
