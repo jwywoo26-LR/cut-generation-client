@@ -1,32 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import TableSelector from './TableSelector';
 import RecordsTable from './RecordsTable';
-
-// Model data - should match ModelSelection component
-const models = [
-  {
-    id: 'train-dfa3f57e398645098c8ffee40446639b',
-    name: '현수아',
-    thumbnail: '/data/thumbnails/suahyun_1.png'
-  },
-  {
-    id: 'train-4331de6cf53d430795deb09fe9728f16', 
-    name: '임수아',
-    thumbnail: '/data/thumbnails/sualim.png'
-  },
-  {
-    id: 'train-7f9911080f9e479198be762001437b16',
-    name: '신서연',
-    thumbnail: '/data/thumbnails/seoyeonshin.png'
-  },
-  {
-    id: 'train-094acb0638db4d51845f95a24b9add2e',
-    name: '김나희',
-    thumbnail: '/data/thumbnails/kimnahee.png'
-  },
-];
 
 interface AirtableRecord {
   id: string;
@@ -36,12 +12,43 @@ interface AirtableRecord {
 
 interface AirtableRecordsProps {
   selectedModelId?: string;
+  onTableChange?: (tableName: string) => void;
+  refreshTrigger?: number;
 }
 
-export default function AirtableRecords({ selectedModelId }: AirtableRecordsProps) {
+export default function AirtableRecords({ selectedModelId, onTableChange, refreshTrigger }: AirtableRecordsProps) {
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [records, setRecords] = useState<AirtableRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [models, setModels] = useState<Array<{id: string; name: string; thumbnail?: string}>>([]);
+
+  // Fetch models on component mount
+  useEffect(() => {
+    fetchModels();
+  }, []);
+
+  // Refresh records when refreshTrigger changes
+  useEffect(() => {
+    if (selectedTable && refreshTrigger !== undefined) {
+      fetchRecords(selectedTable);
+    }
+  }, [refreshTrigger, selectedTable]);
+
+  const fetchModels = async () => {
+    try {
+      const response = await fetch('/api/airtable/models');
+      if (response.ok) {
+        const data = await response.json();
+        setModels(data.models);
+      } else {
+        console.error('Failed to fetch models');
+        setModels([]);
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      setModels([]);
+    }
+  };
 
   // Find selected model info
   const selectedModelInfo = selectedModelId 
@@ -56,16 +63,8 @@ export default function AirtableRecords({ selectedModelId }: AirtableRecordsProp
     );
   };
 
-  const handleTableSelect = async (tableName: string) => {
-    if (!tableName) {
-      setSelectedTable('');
-      setRecords([]);
-      return;
-    }
-
-    setSelectedTable(tableName);
+  const fetchRecords = async (tableName: string) => {
     setIsLoading(true);
-    
     try {
       const response = await fetch(`/api/airtable/records?table=${encodeURIComponent(tableName)}`);
       if (response.ok) {
@@ -81,6 +80,19 @@ export default function AirtableRecords({ selectedModelId }: AirtableRecordsProp
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleTableSelect = async (tableName: string) => {
+    if (!tableName) {
+      setSelectedTable('');
+      setRecords([]);
+      onTableChange?.('');
+      return;
+    }
+
+    setSelectedTable(tableName);
+    onTableChange?.(tableName);
+    await fetchRecords(tableName);
   };
 
 

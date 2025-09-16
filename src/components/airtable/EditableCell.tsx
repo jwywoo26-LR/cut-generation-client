@@ -295,10 +295,10 @@ export default function EditableCell({
   if (isEditing) {
     const isPromptField = fieldKey.toLowerCase().includes('prompt');
     
-    // Calculate dynamic size based on text length
+    // Calculate dynamic size based on text length - make prompt fields much larger
     const textLength = editValue.length;
     const dynamicRows = isPromptField 
-      ? Math.max(2, Math.min(12, Math.ceil(textLength / 80) + 1))
+      ? Math.max(8, Math.min(20, Math.ceil(textLength / 60) + 3))
       : 1;
     const dynamicWidth = isPromptField 
       ? 'w-full'
@@ -315,7 +315,7 @@ export default function EditableCell({
             onBlur={handleSave}
             disabled={isSaving}
             rows={dynamicRows}
-            className="w-full px-3 py-2 text-sm border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 resize-none"
+            className="w-full px-3 py-2 text-sm border border-blue-500 rounded focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:opacity-50 resize-y min-h-[200px]"
             placeholder="Enter your prompt..."
           />
         ) : (

@@ -1,37 +1,14 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 
 interface Model {
   id: string;
   name: string;
   thumbnail: string;
-  description?: string;
+  description?: string; // Optional field that might be returned from API
 }
-
-// Sample custom trained models - replace with your actual models from your service
-const models: Model[] = [
-  {
-    id: 'train-dfa3f57e398645098c8ffee40446639b',
-    name: '현수아',
-    thumbnail: '/data/thumbnails/suahyun_1.png'
-  },
-  {
-    id: 'train-4331de6cf53d430795deb09fe9728f16', 
-    name: '임수아',
-    thumbnail: '/data/thumbnails/sualim.png'
-  },
-  {
-    id: 'train-7f9911080f9e479198be762001437b16',
-    name: '신서연',
-    thumbnail: '/data/thumbnails/seoyeonshin.png'
-  },
-  {
-    id: 'train-094acb0638db4d51845f95a24b9add2e',
-    name: '김나희',
-    thumbnail: '/data/thumbnails/kimnahee.png'
-  },
-];
 
 interface ModelSelectionProps {
   selectedModelId?: string;
@@ -39,47 +16,99 @@ interface ModelSelectionProps {
 }
 
 export default function ModelSelection({ selectedModelId, onModelSelect }: ModelSelectionProps) {
+  const [models, setModels] = useState<Model[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchModels();
+  }, []);
+
+  const fetchModels = async () => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/airtable/models');
+      if (response.ok) {
+        const data = await response.json();
+        // Filter and clean the models data to ensure valid structure
+        const cleanModels = (data.models || []).filter((model: any) => 
+          model && typeof model === 'object' && model.id && model.name
+        ).map((model: any) => ({
+          id: String(model.id),
+          name: String(model.name),
+          thumbnail: model.thumbnail || '',
+          description: model.description
+        }));
+        setModels(cleanModels);
+      } else {
+        console.error('Failed to fetch models');
+        setModels([]);
+      }
+    } catch (error) {
+      console.error('Error fetching models:', error);
+      setModels([]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
         Model Selection
       </h2>
       
-      <div className="overflow-x-auto pb-4">
-        <div className="flex gap-4 min-w-max">
-        {models.map((model) => (
-          <div
-            key={model.id}
-            onClick={() => onModelSelect(model.id)}
-            className={`
-              cursor-pointer rounded-lg border-2 p-4 transition-all hover:shadow-md flex-shrink-0 w-48
-              ${selectedModelId === model.id 
-                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-              }
-            `}
-          >
-            <div className="flex flex-col items-center text-center space-y-3">
-              <Image
-                src={model.thumbnail}
-                alt={model.name}
-                width={256}
-                height={256}
-                className="w-64 h-64 rounded-md object-cover"
-              />
-              <div>
-                <h3 className="font-medium text-gray-900 dark:text-white text-sm">
-                  {model.name}
-                </h3>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  ID: {model.id.slice(0, 12)}...
-                </p>
+      {isLoading ? (
+        <div className="text-center py-8">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
+          <p className="mt-4 text-gray-600 dark:text-gray-300">Loading models...</p>
+        </div>
+      ) : models.length === 0 ? (
+        <div className="text-center py-8">
+          <p className="text-gray-500 dark:text-gray-400">No active models found.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto pb-4">
+          <div className="flex gap-4 min-w-max">
+            {models.map((model) => (
+            <div
+              key={model.id}
+              onClick={() => onModelSelect(model.id)}
+              className={`
+                cursor-pointer rounded-lg border-2 p-4 transition-all hover:shadow-md flex-shrink-0 w-48
+                ${selectedModelId === model.id 
+                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                }
+              `}
+            >
+              <div className="flex flex-col items-center text-center space-y-3">
+                {model.thumbnail ? (
+                  <Image
+                    src={model.thumbnail}
+                    alt={model.name}
+                    width={256}
+                    height={256}
+                    className="w-64 h-64 rounded-md object-cover"
+                  />
+                ) : (
+                  <div className="w-64 h-64 rounded-md bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                    <span className="text-gray-500 dark:text-gray-400">No Image</span>
+                  </div>
+                )}
+                <div>
+                  <h3 className="font-medium text-gray-900 dark:text-white text-sm">
+                    {String(model.name)}
+                  </h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    ID: {String(model.id).slice(0, 12)}...
+                  </p>
+                </div>
               </div>
             </div>
+            ))}
           </div>
-        ))}
         </div>
-      </div>
+      )}
       
       {selectedModelId && (
         <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
