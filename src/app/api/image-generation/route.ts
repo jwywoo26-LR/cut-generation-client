@@ -208,6 +208,22 @@ export async function POST(request: Request) {
     const recordsNeedingImages = airtableData.records.filter((record: any) => {
       const hasPrompt = record.fields[promptField] && record.fields[promptField].trim() !== '';
       const missingImages = imageFields.some(field => !record.fields[field]);
+      
+      // Check status field to prevent duplicate requests
+      const status = record.fields.status || '';
+      
+      if (generationType === 'initial') {
+        // Block if initial_request_sent or enhanced_request_sent
+        if (status === 'initial_request_sent' || status === 'enhanced_request_sent') {
+          return false;
+        }
+      } else if (generationType === 'enhanced') {
+        // Block if enhanced_request_sent (but allow if initial_request_sent)
+        if (status === 'enhanced_request_sent') {
+          return false;
+        }
+      }
+      
       return hasPrompt && missingImages;
     });
 
@@ -219,6 +235,28 @@ export async function POST(request: Request) {
     }
 
     const results = [];
+    
+    // First, update status for all records to prevent duplicate requests
+    const statusValue = generationType === 'initial' ? 'initial_request_sent' : 'enhanced_request_sent';
+    
+    for (const record of recordsNeedingImages) {
+      try {
+        await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${airtableApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fields: {
+              status: statusValue
+            }
+          })
+        });
+      } catch (error) {
+        console.error(`Failed to update status for record ${record.id}:`, error);
+      }
+    }
     
     // Process each record
     for (const record of recordsNeedingImages) {
@@ -327,6 +365,9 @@ export async function POST(request: Request) {
         });
 
         if (Object.keys(updateFields).length > 0) {
+          // Add status clear to the update
+          updateFields.status = '';
+          
           const updateResponse = await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
             headers: {
@@ -341,6 +382,18 @@ export async function POST(request: Request) {
           if (!updateResponse.ok) {
             throw new Error(`Failed to update record ${record.id}`);
           }
+        } else {
+          // Even if no images were generated, clear the status
+          await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${airtableApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fields: { status: '' }
+            })
+          });
         }
 
         const successCount = generatedImages.filter(img => img.url).length;
@@ -356,6 +409,23 @@ export async function POST(request: Request) {
 
       } catch (error) {
         console.error(`Error processing record ${record.id}:`, error);
+        
+        // Clear status on error
+        try {
+          await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${airtableApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fields: { status: '' }
+            })
+          });
+        } catch (statusError) {
+          console.error(`Failed to clear status for record ${record.id}:`, statusError);
+        }
+        
         results.push({
           recordId: record.id,
           status: 'error',

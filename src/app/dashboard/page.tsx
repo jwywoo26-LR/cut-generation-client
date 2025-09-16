@@ -71,6 +71,8 @@ export default function DashboardPage() {
       <ModelSelection 
         selectedModelId={selectedModelId}
         onModelSelect={setSelectedModelId}
+        currentTable={currentTable}
+        onTableSync={handlePromptGenerated}
       />
 
       {/* Dashboard with Tabs */}

@@ -13,11 +13,14 @@ interface Model {
 interface ModelSelectionProps {
   selectedModelId?: string;
   onModelSelect: (modelId: string) => void;
+  currentTable?: string;
+  onTableSync?: () => void;
 }
 
-export default function ModelSelection({ selectedModelId, onModelSelect }: ModelSelectionProps) {
+export default function ModelSelection({ selectedModelId, onModelSelect, currentTable, onTableSync }: ModelSelectionProps) {
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   useEffect(() => {
     fetchModels();
@@ -51,6 +54,40 @@ export default function ModelSelection({ selectedModelId, onModelSelect }: Model
     }
   };
 
+  const handleModelSelect = async (modelId: string) => {
+    onModelSelect(modelId);
+    
+    // If we have a current table, sync the selected_characters field
+    if (currentTable && modelId) {
+      setIsSyncing(true);
+      try {
+        const response = await fetch('/api/airtable/update-selected-characters', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tableName: currentTable,
+            modelId: modelId,
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`Updated selected_characters for ${result.successCount} records`);
+          // Trigger refresh of the AirtableRecords component
+          onTableSync?.();
+        } else {
+          console.error('Failed to update selected_characters');
+        }
+      } catch (error) {
+        console.error('Error updating selected_characters:', error);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
@@ -72,7 +109,7 @@ export default function ModelSelection({ selectedModelId, onModelSelect }: Model
             {models.map((model) => (
             <div
               key={model.id}
-              onClick={() => onModelSelect(model.id)}
+              onClick={() => handleModelSelect(model.id)}
               className={`
                 cursor-pointer rounded-lg border-2 p-4 transition-all hover:shadow-md flex-shrink-0 w-48
                 ${selectedModelId === model.id 
@@ -110,13 +147,39 @@ export default function ModelSelection({ selectedModelId, onModelSelect }: Model
         </div>
       )}
       
-      {selectedModelId && (
-        <div className="mt-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
-          <p className="text-sm text-blue-800 dark:text-blue-200">
-            Selected Model ID: <span className="font-mono font-medium">{selectedModelId}</span>
-          </p>
-        </div>
-      )}
+      <div className="mt-4 space-y-3">
+        {selectedModelId && (
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              Selected Model ID: <span className="font-mono font-medium">{selectedModelId}</span>
+            </p>
+          </div>
+        )}
+        
+        {currentTable && (
+          <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-md">
+            <p className="text-sm text-green-800 dark:text-green-200">
+              Current Table: <span className="font-medium">{currentTable}</span>
+              {selectedModelId && (
+                <span className="block mt-1 text-xs">
+                  Model selections will automatically update the selected_characters field for all records in this table.
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+        
+        {isSyncing && (
+          <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-md">
+            <div className="flex items-center gap-2">
+              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-orange-600"></div>
+              <p className="text-sm text-orange-800 dark:text-orange-200">
+                Updating selected_characters for all records in {currentTable}...
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
