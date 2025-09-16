@@ -29,25 +29,18 @@ export default function TableSelector({ selectedTable, onTableSelect }: TableSel
       if (response.ok) {
         const data = await response.json();
         setAvailableTables(data.tables);
+        
+        // Log filtering results for debugging
+        if (data.totalTables && data.compatibleTables !== undefined) {
+          console.log(`Found ${data.compatibleTables} compatible tables out of ${data.totalTables} total tables`);
+        }
       } else {
         console.error('Failed to fetch tables');
-        // Fallback to sample tables if API fails
-        setAvailableTables([
-          { id: 'sample1', name: 'Character Generation' },
-          { id: 'sample2', name: 'Scene Generation' },
-          { id: 'sample3', name: 'Background Generation' },
-          { id: 'sample4', name: 'Style Transfer' }
-        ]);
+        setAvailableTables([]);
       }
     } catch (error) {
       console.error('Error fetching tables:', error);
-      // Fallback to sample tables
-      setAvailableTables([
-        { id: 'sample1', name: 'Character Generation' },
-        { id: 'sample2', name: 'Scene Generation' },
-        { id: 'sample3', name: 'Background Generation' },
-        { id: 'sample4', name: 'Style Transfer' }
-      ]);
+      setAvailableTables([]);
     } finally {
       setIsLoadingTables(false);
     }
@@ -69,7 +62,12 @@ export default function TableSelector({ selectedTable, onTableSelect }: TableSel
         className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white min-w-64 disabled:opacity-50"
       >
         <option value="">
-          {isLoadingTables ? "Loading tables..." : "Choose a table..."}
+          {isLoadingTables 
+            ? "Loading tables..." 
+            : availableTables.length === 0 
+              ? "No compatible tables found"
+              : "Choose a table..."
+          }
         </option>
         {availableTables.map((table) => (
           <option key={table.id} value={table.name}>
@@ -81,6 +79,12 @@ export default function TableSelector({ selectedTable, onTableSelect }: TableSel
       {selectedTable && (
         <span className="text-xs text-green-600 dark:text-green-400">
           ✓ Connected
+        </span>
+      )}
+      
+      {!isLoadingTables && availableTables.length === 0 && (
+        <span className="text-xs text-amber-600 dark:text-amber-400">
+          ⚠ No tables with required columns found
         </span>
       )}
     </div>

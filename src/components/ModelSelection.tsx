@@ -14,20 +14,22 @@ const models: Model[] = [
   {
     id: 'train-dfa3f57e398645098c8ffee40446639b',
     name: '현수아',
-    thumbnail: '/data/thumbnails/suahyun_1.png',
-    description: 'Trained on anime characters'
+    thumbnail: '/data/thumbnails/suahyun_1.png'
   },
   {
     id: 'train-4331de6cf53d430795deb09fe9728f16', 
     name: '임수아',
-    thumbnail: '/data/thumbnails/sualim.png',
-    description: 'Fantasy character style'
+    thumbnail: '/data/thumbnails/sualim.png'
   },
   {
     id: 'train-7f9911080f9e479198be762001437b16',
     name: '신서연',
-    thumbnail: '/data/thumbnails/seoyeonshin.png',
-    description: 'Realistic modern portraits'
+    thumbnail: '/data/thumbnails/seoyeonshin.png'
+  },
+  {
+    id: 'train-094acb0638db4d51845f95a24b9add2e',
+    name: '김나희',
+    thumbnail: '/data/thumbnails/kimnahee.png'
   },
 ];
 
@@ -72,11 +74,6 @@ export default function ModelSelection({ selectedModelId, onModelSelect }: Model
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
                   ID: {model.id.slice(0, 12)}...
                 </p>
-                {model.description && (
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {model.description}
-                  </p>
-                )}
               </div>
             </div>
           </div>

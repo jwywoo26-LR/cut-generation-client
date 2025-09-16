@@ -1,6 +1,6 @@
 'use client';
 
-import RecordFieldDisplay from './RecordFieldDisplay';
+import EditableCell from './EditableCell';
 
 interface AirtableRecord {
   id: string;
@@ -10,11 +10,95 @@ interface AirtableRecord {
 
 interface RecordsTableProps {
   records: AirtableRecord[];
-  selectedModelId?: string;
   isLoading: boolean;
+  tableName: string;
+  onRecordUpdate: (updatedRecord: AirtableRecord) => void;
+  selectedModelInfo?: {
+    id: string;
+    name: string;
+    thumbnail?: string;
+  };
+  availableModels?: Array<{
+    id: string;
+    name: string;
+    thumbnail?: string;
+  }>;
 }
 
-export default function RecordsTable({ records, selectedModelId, isLoading }: RecordsTableProps) {
+// Required columns for the application - should match the schema
+const REQUIRED_COLUMNS = [
+  'reference_image',
+  'initial_prompt',
+  'enhanced_prompt',
+  'edited_prompt',
+  'reference_image_attached',
+  'selected_characters',
+  'status',
+  'initial_prompt_image_1',
+  'initial_prompt_image_2',
+  'initial_prompt_image_3',
+  'enhanced_prompt_image_1',
+  'enhanced_prompt_image_2',
+  'enhanced_prompt_image_3',
+  'edited_prompt_image_1',
+  'edited_prompt_image_2',
+  'edited_prompt_image_3',
+  'edited_prompt_image_4',
+  'edited_prompt_image_5'
+];
+
+export default function RecordsTable({ 
+  records, 
+  isLoading, 
+  tableName,
+  onRecordUpdate,
+  selectedModelInfo,
+  availableModels
+}: RecordsTableProps) {
+  // Use required columns to ensure all schema fields are shown
+  const allFieldNames = REQUIRED_COLUMNS;
+
+  // Sort records by reference_image field
+  const sortedRecords = [...records].sort((a, b) => {
+    const aRef = String(a.fields['reference_image'] || '').toLowerCase();
+    const bRef = String(b.fields['reference_image'] || '').toLowerCase();
+    
+    // Natural sort to handle reference-01, reference-02, etc.
+    return aRef.localeCompare(bRef, undefined, {
+      numeric: true,
+      sensitivity: 'base'
+    });
+  });
+
+  const handleCellSave = async (recordId: string, fieldKey: string, newValue: string) => {
+    try {
+      const response = await fetch('/api/airtable/update', {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tableName,
+          recordId,
+          fieldKey,
+          value: newValue,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to update record');
+      }
+
+      const result = await response.json();
+      
+      // Update the record in the parent component
+      onRecordUpdate(result.record);
+      
+    } catch (error) {
+      console.error('Error updating record:', error);
+      throw error; // Re-throw so EditableCell can handle the error
+    }
+  };
   if (isLoading) {
     return (
       <div className="text-center py-8">
@@ -39,55 +123,33 @@ export default function RecordsTable({ records, selectedModelId, isLoading }: Re
       <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
         <thead className="bg-gray-50 dark:bg-gray-700">
           <tr>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Record ID
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Fields
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Created
-            </th>
-            <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
-              Actions
-            </th>
+            {allFieldNames.map((fieldName) => (
+              <th
+                key={fieldName}
+                className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider min-w-80"
+              >
+                {fieldName.replace(/_/g, ' ')}
+              </th>
+            ))}
           </tr>
         </thead>
         <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-          {records.map((record) => (
+          {sortedRecords.map((record) => (
             <tr key={record.id}>
-              <td className="px-6 py-4 whitespace-nowrap">
-                <div className="text-sm font-mono text-gray-900 dark:text-white">
-                  {record.id.slice(0, 8)}...
-                </div>
-              </td>
-              <td className="px-6 py-4">
-                <div className="max-w-md">
-                  {Object.entries(record.fields).map(([key, value]) => (
-                    <RecordFieldDisplay
-                      key={key}
-                      fieldKey={key}
-                      value={value}
-                    />
-                  ))}
-                </div>
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                {new Date(record.createdTime).toLocaleDateString()}
-              </td>
-              <td className="px-6 py-4 whitespace-nowrap text-sm">
-                <div className="flex gap-2">
-                  <button 
-                    className="text-blue-600 hover:text-blue-900 dark:text-blue-400"
-                    disabled={!selectedModelId}
-                  >
-                    Generate
-                  </button>
-                  <button className="text-green-600 hover:text-green-900 dark:text-green-400">
-                    Download
-                  </button>
-                </div>
-              </td>
+              {allFieldNames.map((fieldName) => (
+                <td key={`${record.id}-${fieldName}`} className="px-3 py-8 align-top min-w-80">
+                  <EditableCell
+                    value={record.fields[fieldName] || ''}
+                    fieldKey={fieldName}
+                    recordId={record.id}
+                    onSave={handleCellSave}
+                    isEditable={true}
+                    recordFields={record.fields}
+                    selectedModelInfo={selectedModelInfo}
+                    availableModels={availableModels}
+                  />
+                </td>
+              ))}
             </tr>
           ))}
         </tbody>
