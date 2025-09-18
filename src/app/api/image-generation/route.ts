@@ -264,9 +264,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (generationType !== 'initial' && generationType !== 'edited') {
+    if (generationType !== 'initial' && generationType !== 'edited' && generationType !== 'prompt-only') {
       return NextResponse.json(
-        { error: 'Generation type must be "initial" or "edited"' },
+        { error: 'Generation type must be "initial", "edited", or "prompt-only"' },
         { status: 400 }
       );
     }
