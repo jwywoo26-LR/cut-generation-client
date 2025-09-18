@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Image from 'next/image';
 import EditableCell from '../EditableCell';
 
@@ -28,7 +29,12 @@ export default function PromptOnlyImageSection({
   onEditingChange,
   onDownload
 }: PromptOnlyImageSectionProps) {
-  const promptValue = String(record.fields['initial_prompt'] || '');
+  const [selectedPromptType, setSelectedPromptType] = useState<'initial' | 'edited'>('initial');
+  
+  const initialPromptValue = String(record.fields['initial_prompt'] || '');
+  const editedPromptValue = String(record.fields['edited_prompt'] || '');
+  
+  const promptValue = selectedPromptType === 'initial' ? initialPromptValue : editedPromptValue;
   
   // Get prompt-only image fields
   const imageFields = ['prompt_only_image_1', 'prompt_only_image_2', 'prompt_only_image_3'];
@@ -62,14 +68,34 @@ export default function PromptOnlyImageSection({
       </div>
       
       <div className="space-y-4">
-        {/* Prompt Display */}
+        {/* Prompt Selection and Display */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-            Text Prompt (used for generation)
-          </label>
-          <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded border text-sm text-gray-600 dark:text-gray-300">
-            {promptValue || 'No prompt available'}
+          <div className="flex items-center justify-between mb-2">
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Select Prompt for Generation
+            </label>
+            <select
+              value={selectedPromptType}
+              onChange={(e) => setSelectedPromptType(e.target.value as 'initial' | 'edited')}
+              className="px-3 py-1 text-xs border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value="initial">Initial Prompt</option>
+              <option value="edited">Edited Prompt</option>
+            </select>
           </div>
+          <div className="p-3 bg-gray-50 dark:bg-gray-700 rounded border text-sm text-gray-600 dark:text-gray-300">
+            {promptValue || `No ${selectedPromptType} prompt available`}
+          </div>
+          {selectedPromptType === 'initial' && editedPromptValue && (
+            <div className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+              💡 Edited prompt is also available for selection
+            </div>
+          )}
+          {selectedPromptType === 'edited' && !editedPromptValue && (
+            <div className="text-xs text-amber-600 dark:text-amber-400 mt-1">
+              ⚠️ No edited prompt available, consider using initial prompt instead
+            </div>
+          )}
         </div>
 
         {/* Model Information */}

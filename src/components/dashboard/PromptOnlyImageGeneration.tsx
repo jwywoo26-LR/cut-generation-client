@@ -26,6 +26,7 @@ export default function PromptOnlyImageGeneration({ currentTable, onImagesGenera
   const [error, setError] = useState<string>('');
   const [imageCount, setImageCount] = useState<number>(3);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [selectedPromptType, setSelectedPromptType] = useState<'initial' | 'edited'>('initial');
 
   const handleDownloadAll = async () => {
     console.log('Download button clicked');
@@ -134,6 +135,7 @@ export default function PromptOnlyImageGeneration({ currentTable, onImagesGenera
           tableName: currentTable,
           generationType: 'prompt-only',
           imageCount: imageCount,
+          promptType: selectedPromptType,
         }),
       });
 
@@ -181,7 +183,7 @@ export default function PromptOnlyImageGeneration({ currentTable, onImagesGenera
         
         <div className="space-y-4">
           <p className="text-gray-600 dark:text-gray-300 text-sm">
-            Generate images using only the text prompt (initial_prompt). Reference images are used only for optimal dimensions.
+            Generate images using only text prompts (initial_prompt or edited_prompt). Reference images are used only for optimal dimensions.
             Images will be saved to numbered prompt_only_image fields (1-3).
             {currentTable && (
               <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
@@ -190,21 +192,39 @@ export default function PromptOnlyImageGeneration({ currentTable, onImagesGenera
             )}
           </p>
 
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Number of images per record:
-            </label>
-            
-            <select
-              value={imageCount}
-              onChange={(e) => setImageCount(Number(e.target.value))}
-              disabled={isGenerating}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-            >
-              <option value={1}>1 image</option>
-              <option value={2}>2 images</option>
-              <option value={3}>3 images</option>
-            </select>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Number of images per record:
+              </label>
+              
+              <select
+                value={imageCount}
+                onChange={(e) => setImageCount(Number(e.target.value))}
+                disabled={isGenerating}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-full"
+              >
+                <option value={1}>1 image</option>
+                <option value={2}>2 images</option>
+                <option value={3}>3 images</option>
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Prompt to use for generation:
+              </label>
+              
+              <select
+                value={selectedPromptType}
+                onChange={(e) => setSelectedPromptType(e.target.value as 'initial' | 'edited')}
+                disabled={isGenerating}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm w-full"
+              >
+                <option value="initial">Initial Prompt</option>
+                <option value="edited">Edited Prompt</option>
+              </select>
+            </div>
           </div>
 
           <div className="space-y-3">

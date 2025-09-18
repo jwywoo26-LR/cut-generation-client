@@ -247,7 +247,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { tableName, recordIds, generationType, modelId, imageCount = 3 } = await request.json();
+    const { tableName, recordIds, generationType, modelId, imageCount = 3, promptType = 'initial' } = await request.json();
 
     if (!tableName || !generationType) {
       return NextResponse.json(
@@ -313,7 +313,12 @@ export async function POST(request: Request) {
     
     
     // Filter records that need image generation
-    const promptField = generationType === 'initial' ? 'initial_prompt' : 'edited_prompt';
+    let promptField: string;
+    if (generationType === 'prompt-only') {
+      promptField = promptType === 'edited' ? 'edited_prompt' : 'initial_prompt';
+    } else {
+      promptField = generationType === 'initial' ? 'initial_prompt' : 'edited_prompt';
+    }
     const imageFields: string[] = [];
     let imageFieldPrefix: string;
     let maxImages: number;
