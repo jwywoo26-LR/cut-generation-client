@@ -33,11 +33,11 @@ export async function GET() {
     
     // Transform records to model format
     const models = data.records
-      .filter((record: any) => {
+      .filter((record: { fields: Record<string, unknown> }) => {
         // Check if status field exists and is Active, otherwise include all records
         return !record.fields.status || record.fields.status === 'Active';
       })
-      .map((record: any) => {
+      .map((record: { id: string; fields: Record<string, unknown> }) => {
         // Try multiple possible thumbnail field names including the typo
         let thumbnailUrl = '';
         const possibleFields = ['thumnail', 'thumbnail', 'Thumbnail', 'image', 'Image', 'photo', 'Photo'];
@@ -52,7 +52,7 @@ export async function GET() {
         
         return {
           id: record.fields.model_id || record.fields.Model_ID || record.fields['Model ID'] || record.id,
-          name: (record.fields.model_name || record.fields.Model_Name || record.fields['Model Name'] || 'Unknown').trim(),
+          name: String(record.fields.model_name || record.fields.Model_Name || record.fields['Model Name'] || 'Unknown').trim(),
           thumbnail: thumbnailUrl,
         };
       });

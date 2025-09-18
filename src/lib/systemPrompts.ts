@@ -61,7 +61,6 @@ export function getTagsString(): string {
 }
 
 export function createTagInitialPrompt(): string {
-  const tagsString = getTagsString();
   // return `${TAG_INITIAL_GENERATION}\n\nAvailable tags to choose from: ${tagsString}`;
   return `${TAG_INITIAL_GENERATION}`;
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import TableSelector from './TableSelector';
 import RecordsTable from './RecordsTable';
 
@@ -24,6 +24,26 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
   const [models, setModels] = useState<Array<{id: string; name: string; thumbnail?: string}>>([]);
   const [hasActiveEdits, setHasActiveEdits] = useState(false);
 
+  const fetchRecords = useCallback(async (tableName: string) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch(`/api/airtable/records?table=${encodeURIComponent(tableName)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(data.records);
+        onRecordsChange?.(data.records);
+      } else {
+        console.error('Failed to fetch records');
+        setRecords([]);
+      }
+    } catch (error) {
+      console.error('Error fetching records:', error);
+      setRecords([]);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [onRecordsChange]);
+
   // Fetch models on component mount
   useEffect(() => {
     fetchModels();
@@ -34,7 +54,7 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
     if (selectedTable && refreshTrigger !== undefined) {
       fetchRecords(selectedTable);
     }
-  }, [refreshTrigger, selectedTable]);
+  }, [refreshTrigger, selectedTable, fetchRecords]);
 
   // Auto-refresh when generation jobs are active (every 60 seconds)
   useEffect(() => {
@@ -42,8 +62,8 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
     
     // Check if any records are currently processing
     const hasActiveJobs = records.some(record => {
-      const status = String(record.fields.status || '');
-      return status === 'generation_request_sent' || status === 'initial_request_sent';
+      const resultStatus = String(record.fields.result_status || '');
+      return resultStatus.includes('_request_sent');
     });
     
     if (!hasActiveJobs) return; // No active jobs, no need to auto-refresh
@@ -58,7 +78,7 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
     }, 60000); // Refresh every 60 seconds
     
     return () => clearInterval(interval);
-  }, [records, selectedTable, hasActiveEdits]);
+  }, [records, selectedTable, hasActiveEdits, fetchRecords]);
 
   const fetchModels = async () => {
     try {
@@ -89,25 +109,6 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
     onRecordsChange?.(updatedRecords);
   };
 
-  const fetchRecords = async (tableName: string) => {
-    setIsLoading(true);
-    try {
-      const response = await fetch(`/api/airtable/records?table=${encodeURIComponent(tableName)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setRecords(data.records);
-        onRecordsChange?.(data.records);
-      } else {
-        console.error('Failed to fetch records');
-        setRecords([]);
-      }
-    } catch (error) {
-      console.error('Error fetching records:', error);
-      setRecords([]);
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   const handleTableSelect = async (tableName: string) => {
     if (!tableName) {

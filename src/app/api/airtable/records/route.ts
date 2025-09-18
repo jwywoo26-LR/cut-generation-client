@@ -4,6 +4,8 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const tableName = searchParams.get('table');
+    const resultStatus = searchParams.get('result_status');
+    const regenerationStatus = searchParams.get('regeneration_status');
     
     if (!tableName) {
       return NextResponse.json(
@@ -25,15 +27,36 @@ export async function GET(request: Request) {
     // Encode table name for URL
     const encodedTableName = encodeURIComponent(tableName);
     
-    const response = await fetch(
-      `https://api.airtable.com/v0/${baseId}/${encodedTableName}?maxRecords=50`,
-      {
-        headers: {
-          'Authorization': `Bearer ${apiKey}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
+    // Build filter formula if filters are provided
+    let filterFormula = '';
+    const filters = [];
+    
+    if (resultStatus) {
+      filters.push(`{result_status} = '${resultStatus}'`);
+    }
+    
+    if (regenerationStatus) {
+      const boolValue = regenerationStatus === 'true' ? 'TRUE()' : 'FALSE()';
+      filters.push(`{regeneration_status} = ${boolValue}`);
+    }
+    
+    if (filters.length > 0) {
+      filterFormula = filters.length === 1 ? filters[0] : `AND(${filters.join(', ')})`;
+    }
+    
+    // Build URL with optional filter
+    const url = new URL(`https://api.airtable.com/v0/${baseId}/${encodedTableName}`);
+    url.searchParams.set('maxRecords', '50');
+    if (filterFormula) {
+      url.searchParams.set('filterByFormula', filterFormula);
+    }
+    
+    const response = await fetch(url.toString(), {
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    });
 
     if (!response.ok) {
       throw new Error(`Airtable API error: ${response.status}`);

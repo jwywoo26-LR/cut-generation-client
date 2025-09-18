@@ -97,6 +97,98 @@ class ImageAPIClient {
   }
 }
 
+// Helper function to get optimal dimensions based on aspect ratio
+function getOptimalDimensions(width: number, height: number): { width: number; height: number } {
+  const aspectRatio = width / height;
+  
+  // Define the three optimal size options
+  const sizeOptions = [
+    { width: 1024, height: 1024, ratio: 1.0 },     // Square
+    { width: 896, height: 1152, ratio: 0.778 },    // Portrait  
+    { width: 1152, height: 896, ratio: 1.286 }     // Landscape
+  ];
+  
+  // Find the closest aspect ratio match
+  let bestMatch = sizeOptions[0];
+  let smallestDiff = Math.abs(aspectRatio - bestMatch.ratio);
+  
+  for (const option of sizeOptions) {
+    const diff = Math.abs(aspectRatio - option.ratio);
+    if (diff < smallestDiff) {
+      smallestDiff = diff;
+      bestMatch = option;
+    }
+  }
+  
+  console.log(`Original dimensions: ${width}x${height} (ratio: ${aspectRatio.toFixed(3)}) -> Optimal: ${bestMatch.width}x${bestMatch.height} (ratio: ${bestMatch.ratio.toFixed(3)})`);
+  
+  return { width: bestMatch.width, height: bestMatch.height };
+}
+
+// Helper function to get image dimensions from buffer
+function getImageDimensionsFromBuffer(buffer: Buffer): { width: number; height: number } {
+  // Basic JPEG dimension reading (JPEG starts with FFD8)
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) {
+    // JPEG format - look for SOF markers (Start of Frame)
+    for (let i = 2; i < buffer.length - 8; i++) {
+      if (buffer[i] === 0xFF && (buffer[i + 1] === 0xC0 || buffer[i + 1] === 0xC2)) {
+        const height = (buffer[i + 5] << 8) | buffer[i + 6];
+        const width = (buffer[i + 7] << 8) | buffer[i + 8];
+        return { width, height };
+      }
+    }
+  }
+  
+  // Basic PNG dimension reading (PNG signature: 89504E47)
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) {
+    // PNG IHDR chunk is at bytes 16-23 for width and 20-23 for height
+    const width = buffer.readUInt32BE(16);
+    const height = buffer.readUInt32BE(20);
+    return { width, height };
+  }
+  
+  // WebP format (starts with "RIFF" and contains "WEBP")
+  if (buffer.toString('ascii', 0, 4) === 'RIFF' && buffer.toString('ascii', 8, 12) === 'WEBP') {
+    // Simple WebP VP8 format
+    if (buffer.toString('ascii', 12, 16) === 'VP8 ') {
+      const width = buffer.readUInt16LE(26) & 0x3fff;
+      const height = buffer.readUInt16LE(28) & 0x3fff;
+      return { width, height };
+    }
+    // WebP VP8L format
+    if (buffer.toString('ascii', 12, 16) === 'VP8L') {
+      const bits = buffer.readUInt32LE(21);
+      const width = (bits & 0x3fff) + 1;
+      const height = ((bits >> 14) & 0x3fff) + 1;
+      return { width, height };
+    }
+  }
+  
+  console.log('Could not determine image dimensions, using default 1024x1024');
+  return { width: 1024, height: 1024 };
+}
+
+// Helper function to get image dimensions
+async function getImageDimensions(imageUrl: string): Promise<{ width: number; height: number }> {
+  try {
+    const response = await fetch(imageUrl);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch image: ${response.status}`);
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
+    
+    const dimensions = getImageDimensionsFromBuffer(buffer);
+    console.log(`Detected image dimensions: ${dimensions.width}x${dimensions.height}`);
+    return dimensions;
+    
+  } catch (error) {
+    console.error('Error getting image dimensions:', error);
+    return { width: 1024, height: 1024 }; // Fallback to square
+  }
+}
+
 // Helper function to fetch image as base64
 async function fetchImageAsBase64(imageUrl: string): Promise<string> {
   try {
@@ -115,27 +207,6 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string> {
 }
 
 // Helper function to upload image to Airtable
-async function uploadImageToAirtable(imageUrl: string, filename: string) {
-  try {
-    const response = await fetch(imageUrl);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch generated image: ${response.status}`);
-    }
-    
-    const imageBuffer = await response.arrayBuffer();
-    
-    // Create form data for Airtable upload
-    const formData = new FormData();
-    formData.append('file', new Blob([imageBuffer]), filename);
-    
-    // Upload to Airtable (simplified - you may need to implement actual Airtable upload)
-    // For now, return the original URL
-    return imageUrl;
-  } catch (error) {
-    console.error('Error uploading to Airtable:', error);
-    throw error;
-  }
-}
 
 export async function POST(request: Request) {
   try {
@@ -225,29 +296,28 @@ export async function POST(request: Request) {
     console.log(`Available image fields: ${imageFields.join(', ')}`);
     console.log(`Will generate ${actualImageCount} image(s) instead of requested ${imageCount}`);
 
-    const recordsNeedingImages = airtableData.records.filter((record: any) => {
-      const hasPrompt = record.fields[promptField] && record.fields[promptField].trim() !== '';
+    const recordsNeedingImages = airtableData.records.filter((record: { id: string; fields: Record<string, unknown> }) => {
+      const hasPrompt = record.fields[promptField] && String(record.fields[promptField]).trim() !== '';
       const missingImages = imageFields.some(field => !record.fields[field]);
       
-      // Check status field to prevent duplicate requests
-      const status = String(record.fields.status || '');
-      
+      // Check result_status field to prevent duplicate requests and ensure proper flow
+      const resultStatus = String(record.fields.result_status || '');
       
       // Block if currently processing
-      if (status === 'initial_request_sent' || status === 'generation_request_sent') {
+      if (resultStatus.includes('_request_sent')) {
         return false;
       }
       
       // Different status requirements for initial vs edited generation
       if (generationType === 'initial') {
-        // Allow if status is "prompt_generated" (ready for images) or "True" (regeneration allowed)
-        const allowsGeneration = status === 'prompt_generated' || status === 'True';
+        // Allow if result_status is "prompt_generated" (ready for images)
+        const allowsGeneration = resultStatus === 'prompt_generated';
         if (!allowsGeneration) {
           return false;
         }
       } else if (generationType === 'edited') {
-        // For edited generation, only allow when status is "False" (initial generation complete)
-        if (status !== 'False') {
+        // For edited generation, only allow when result_status is "initial_prompt_image_generated" (initial generation complete)
+        if (resultStatus !== 'initial_prompt_image_generated') {
           return false;
         }
       }
@@ -274,8 +344,10 @@ export async function POST(request: Request) {
 
     const results = [];
     
-    // First, update status for all records to prevent duplicate requests
-    const statusValue = 'generation_request_sent';
+    // First, update result_status for all records to prevent duplicate requests
+    const statusValue = generationType === 'initial' 
+      ? 'initial_prompt_image_request_sent'
+      : 'edited_prompt_image_request_sent';
     
     for (const record of recordsNeedingImages) {
       try {
@@ -287,12 +359,12 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             fields: {
-              status: statusValue
+              result_status: statusValue
             }
           })
         });
       } catch (error) {
-        console.error(`Failed to update status for record ${record.id}:`, error);
+        console.error(`Failed to update result_status for record ${record.id}:`, error);
       }
     }
     
@@ -305,9 +377,10 @@ export async function POST(request: Request) {
         const referenceImageField = record.fields.reference_image_attached;
         let referenceImageBase64 = '';
         
+        let referenceImageUrl = '';
         if (referenceImageField && Array.isArray(referenceImageField) && referenceImageField.length > 0) {
-          const imageUrl = referenceImageField[0].url;
-          referenceImageBase64 = await fetchImageAsBase64(imageUrl);
+          referenceImageUrl = referenceImageField[0].url;
+          referenceImageBase64 = await fetchImageAsBase64(referenceImageUrl);
         } else {
           console.log(`Skipping record ${record.id}: No reference image found`);
           results.push({
@@ -335,13 +408,17 @@ export async function POST(request: Request) {
           try {
             console.log(`Generating ${generationType} image ${i + 1}/${actualImageCount} for record ${record.id}`);
             
-            // Start image generation
+            // Get optimal dimensions for the reference image
+            const imageDimensions = await getImageDimensions(referenceImageUrl);
+            const optimalDimensions = getOptimalDimensions(imageDimensions.width, imageDimensions.height);
+            
+            // Start image generation with optimal dimensions
             const generateResponse = await imageClient.generateImageWithReference(
               prompt,
               referenceImageBase64,
               bodyModelId,
-              1024,
-              1024,
+              optimalDimensions.width,
+              optimalDimensions.height,
               false
             );
 
@@ -392,7 +469,7 @@ export async function POST(request: Request) {
         }
 
         // Update Airtable record with generated images
-        const updateFields: Record<string, any> = {};
+        const updateFields: Record<string, unknown> = {};
         
         generatedImages.forEach((img, index) => {
           if (img.url) {
@@ -403,8 +480,10 @@ export async function POST(request: Request) {
         });
 
         if (Object.keys(updateFields).length > 0) {
-          // Set status to "False" after successful generation
-          updateFields.status = 'False';
+          // Set result_status after successful generation
+          updateFields.result_status = generationType === 'initial' 
+            ? 'initial_prompt_image_generated'
+            : 'edited_prompt_image_generated';
           
           const updateResponse = await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -424,7 +503,7 @@ export async function POST(request: Request) {
             throw new Error(`Failed to update record ${record.id}: ${updateResponse.status} - ${errorText}`);
           }
         } else {
-          // Even if no images were generated, set status to "False"
+          // Even if no images were generated, set result_status to completion
           await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
             headers: {
@@ -432,7 +511,11 @@ export async function POST(request: Request) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              fields: { status: 'False' }
+              fields: { 
+                result_status: generationType === 'initial' 
+                  ? 'initial_prompt_image_generated'
+                  : 'edited_prompt_image_generated'
+              }
             })
           });
         }
@@ -451,7 +534,7 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error(`Error processing record ${record.id}:`, error);
         
-        // Set status to "False" on error
+        // Set result_status to completion on error
         try {
           await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -460,7 +543,11 @@ export async function POST(request: Request) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              fields: { status: 'False' }
+              fields: { 
+                result_status: generationType === 'initial' 
+                  ? 'initial_prompt_image_generated'
+                  : 'edited_prompt_image_generated'
+              }
             })
           });
         } catch (statusError) {

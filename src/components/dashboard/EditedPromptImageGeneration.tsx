@@ -27,6 +27,7 @@ export default function EditedPromptImageGeneration({ currentTable, onImagesGene
   const [imageCount, setImageCount] = useState<number>(3);
   const [isDownloading, setIsDownloading] = useState(false);
 
+
   const handleDownloadAll = async () => {
     console.log('Download button clicked');
     console.log('Current table:', currentTable);
@@ -114,34 +115,35 @@ export default function EditedPromptImageGeneration({ currentTable, onImagesGene
     }
   };
 
-  // Check if all records have status "False" (initial generation complete)
+  // Check if all records have result_status "initial_prompt_image_generated" (initial generation complete)
   const allRecordsComplete = records.length > 0 && records.every(record => {
-    const status = String(record.fields.status || '');
-    return status === 'False';
+    const resultStatus = String(record.fields.result_status || '');
+    return resultStatus === 'initial_prompt_image_generated';
   });
 
   // Count records that have edited_prompt but no edited_prompt_images
   const recordsNeedingEditedImages = records.filter(record => {
     const hasEditedPrompt = record.fields.edited_prompt && 
                            String(record.fields.edited_prompt).trim() !== '';
-    const status = String(record.fields.status || '');
+    const resultStatus = String(record.fields.result_status || '');
     
     // Check if any edited_prompt_image fields are missing
     const missingEditedImages = ['edited_prompt_image_1', 'edited_prompt_image_2', 'edited_prompt_image_3', 'edited_prompt_image_4', 'edited_prompt_image_5']
       .slice(0, imageCount)
       .some(field => !record.fields[field]);
     
-    return hasEditedPrompt && status === 'False' && missingEditedImages;
+    return hasEditedPrompt && resultStatus === 'initial_prompt_image_generated' && missingEditedImages;
   });
 
   const handleGenerateImages = async () => {
+    
     if (!currentTable) {
       setError('Please select a table from the Airtable Records section first');
       return;
     }
 
     if (!allRecordsComplete) {
-      setError('Initial image generation must be complete (all records status: False) before edited prompt generation');
+      setError('Initial image generation must be complete (all records result_status: initial_prompt_image_generated) before edited prompt generation');
       return;
     }
 
@@ -252,6 +254,9 @@ export default function EditedPromptImageGeneration({ currentTable, onImagesGene
                   ? `Ready! ${recordsNeedingEditedImages.length} records need edited prompt images`
                   : 'Waiting for initial generation to complete'
                 }
+              </div>
+              <div className="text-green-800 dark:text-green-200 text-xs mt-1">
+                Debug: Total records: {records.length} | All complete: {allRecordsComplete ? 'YES' : 'NO'} | Need images: {recordsNeedingEditedImages.length}
               </div>
             </div>
             

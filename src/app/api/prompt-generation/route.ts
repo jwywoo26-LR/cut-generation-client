@@ -161,14 +161,14 @@ export async function POST(request: Request) {
     const airtableData = await airtableResponse.json();
     
     // Filter records that need prompt generation
-    const recordsNeedingPrompts = airtableData.records.filter((record: any) => {
+    const recordsNeedingPrompts = airtableData.records.filter((record: { id: string; fields: Record<string, unknown> }) => {
       // Must have reference image
       const hasReference = record.fields.reference_image_attached && 
                           Array.isArray(record.fields.reference_image_attached) && 
                           record.fields.reference_image_attached.length > 0;
       
       const hasInitialPrompt = record.fields.initial_prompt && 
-                              record.fields.initial_prompt.trim() !== '';
+                              String(record.fields.initial_prompt).trim() !== '';
       const status = String(record.fields.status || '');
       
       // Records that need prompt generation:

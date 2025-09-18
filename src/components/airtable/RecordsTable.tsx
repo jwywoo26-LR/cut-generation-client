@@ -1,6 +1,8 @@
 'use client';
 
+import { useState } from 'react';
 import EditableCell from './EditableCell';
+import RecordModal from './RecordModal';
 
 interface AirtableRecord {
   id: string;
@@ -26,25 +28,6 @@ interface RecordsTableProps {
   onEditingChange?: (isEditing: boolean) => void;
 }
 
-// Required columns for the application - should match the schema
-const REQUIRED_COLUMNS = [
-  'reference_image',
-  'initial_prompt',
-  'edited_prompt',
-  'reference_image_attached',
-  'selected_characters',
-  'status',
-  'initial_prompt_image_1',
-  'initial_prompt_image_2',
-  'initial_prompt_image_3',
-  'initial_prompt_image_4',
-  'initial_prompt_image_5',
-  'edited_prompt_image_1',
-  'edited_prompt_image_2',
-  'edited_prompt_image_3',
-  'edited_prompt_image_4',
-  'edited_prompt_image_5'
-];
 
 export default function RecordsTable({ 
   records, 
@@ -55,30 +38,15 @@ export default function RecordsTable({
   availableModels,
   onEditingChange
 }: RecordsTableProps) {
-  // Filter out empty image columns for display
-  const getVisibleColumns = () => {
-    const imageColumns = [
-      'initial_prompt_image_1', 'initial_prompt_image_2', 'initial_prompt_image_3', 
-      'initial_prompt_image_4', 'initial_prompt_image_5',
-      'edited_prompt_image_1', 'edited_prompt_image_2', 'edited_prompt_image_3',
-      'edited_prompt_image_4', 'edited_prompt_image_5'
-    ];
-    
-    const nonImageColumns = REQUIRED_COLUMNS.filter(col => !imageColumns.includes(col));
-    
-    // Check which image columns have content in any record
-    const visibleImageColumns = imageColumns.filter(col => 
-      records.some(record => 
-        record.fields[col] && 
-        (typeof record.fields[col] === 'string' && record.fields[col].startsWith('http') ||
-         Array.isArray(record.fields[col]) && record.fields[col].length > 0)
-      )
-    );
-    
-    return [...nonImageColumns, ...visibleImageColumns];
-  };
+  const [expandedRecord, setExpandedRecord] = useState<string | null>(null);
   
-  const allFieldNames = getVisibleColumns();
+  // Essential columns for compact view
+  const compactColumns = [
+    'reference_image',
+    'reference_image_attached', 
+    'selected_characters',
+    'result_status'
+  ];
 
   // Sort records by reference_image field
   const sortedRecords = [...records].sort((a, b) => {
@@ -91,6 +59,16 @@ export default function RecordsTable({
       sensitivity: 'base'
     });
   });
+
+  const currentRecordIndex = expandedRecord ? sortedRecords.findIndex(r => r.id === expandedRecord) : -1;
+
+  const handleNavigateRecord = (direction: 'prev' | 'next') => {
+    if (direction === 'prev' && currentRecordIndex > 0) {
+      setExpandedRecord(sortedRecords[currentRecordIndex - 1].id);
+    } else if (direction === 'next' && currentRecordIndex < sortedRecords.length - 1) {
+      setExpandedRecord(sortedRecords[currentRecordIndex + 1].id);
+    }
+  };
 
   const handleCellSave = async (recordId: string, fieldKey: string, newValue: string) => {
     try {
@@ -121,6 +99,10 @@ export default function RecordsTable({
       throw error; // Re-throw so EditableCell can handle the error
     }
   };
+
+  const handleRecordUpdate = (updatedRecord: AirtableRecord) => {
+    onRecordUpdate(updatedRecord);
+  };
   if (isLoading) {
     return (
       <div className="text-center py-8">
@@ -141,42 +123,70 @@ export default function RecordsTable({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-        <thead className="bg-gray-50 dark:bg-gray-700">
-          <tr>
-            {allFieldNames.map((fieldName) => (
-              <th
-                key={fieldName}
-                className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider min-w-80"
-              >
-                {fieldName.replace(/_/g, ' ')}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-          {sortedRecords.map((record) => (
-            <tr key={record.id}>
-              {allFieldNames.map((fieldName) => (
-                <td key={`${record.id}-${fieldName}`} className="px-3 py-8 align-top min-w-80">
-                  <EditableCell
-                    value={record.fields[fieldName] || ''}
-                    fieldKey={fieldName}
-                    recordId={record.id}
-                    onSave={handleCellSave}
-                    isEditable={true}
-                    recordFields={record.fields}
-                    selectedModelInfo={selectedModelInfo}
-                    availableModels={availableModels}
-                    onEditingChange={onEditingChange}
-                  />
-                </td>
+    <>
+      <div className="overflow-x-auto">
+        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+          <thead className="bg-gray-50 dark:bg-gray-700">
+            <tr>
+              {compactColumns.map((fieldName) => (
+                <th
+                  key={fieldName}
+                  className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
+                >
+                  {fieldName.replace(/_/g, ' ')}
+                </th>
               ))}
+              <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                Actions
+              </th>
             </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+          </thead>
+          <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+            {sortedRecords.map((record) => (
+              <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
+                {compactColumns.map((fieldName) => (
+                  <td key={`${record.id}-${fieldName}`} className="px-3 py-4 align-top">
+                    <EditableCell
+                      value={record.fields[fieldName] || ''}
+                      fieldKey={fieldName}
+                      recordId={record.id}
+                      onSave={handleCellSave}
+                      isEditable={fieldName === 'selected_characters'}
+                      recordFields={record.fields}
+                      selectedModelInfo={selectedModelInfo}
+                      availableModels={availableModels}
+                      onEditingChange={onEditingChange}
+                    />
+                  </td>
+                ))}
+                <td className="px-3 py-4 align-top">
+                  <button
+                    onClick={() => setExpandedRecord(record.id)}
+                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-md transition-colors"
+                  >
+                    View Details
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal */}
+      <RecordModal
+        record={sortedRecords.find(r => r.id === expandedRecord) || null}
+        isOpen={expandedRecord !== null}
+        onClose={() => setExpandedRecord(null)}
+        tableName={tableName}
+        onRecordUpdate={handleRecordUpdate}
+        selectedModelInfo={selectedModelInfo}
+        availableModels={availableModels}
+        onEditingChange={onEditingChange}
+        allRecords={sortedRecords}
+        currentRecordIndex={currentRecordIndex >= 0 ? currentRecordIndex : 0}
+        onNavigateRecord={handleNavigateRecord}
+      />
+    </>
   );
 }

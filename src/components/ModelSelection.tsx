@@ -33,9 +33,9 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
       if (response.ok) {
         const data = await response.json();
         // Filter and clean the models data to ensure valid structure
-        const cleanModels = (data.models || []).filter((model: any) => 
+        const cleanModels = (data.models || []).filter((model: { id: unknown; name: unknown; thumbnail?: unknown; description?: unknown }) => 
           model && typeof model === 'object' && model.id && model.name
-        ).map((model: any) => ({
+        ).map((model: { id: unknown; name: unknown; thumbnail?: unknown; description?: unknown }) => ({
           id: String(model.id),
           name: String(model.name),
           thumbnail: model.thumbnail || '',

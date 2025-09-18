@@ -39,7 +39,7 @@ export async function POST(request: Request) {
     const airtableData = await airtableResponse.json();
     
     // Update selected_characters field for all records
-    const updatePromises = airtableData.records.map(async (record: any) => {
+    const updatePromises = airtableData.records.map(async (record: { id: string; fields: Record<string, unknown> }) => {
       try {
         const updateResponse = await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
           method: 'PATCH',
