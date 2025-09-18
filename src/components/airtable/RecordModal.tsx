@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import PromptImageSection from './modal/PromptImageSection';
+import PromptOnlyImageSection from './modal/PromptOnlyImageSection';
 import StatusSection from './modal/StatusSection';
 import EditableCell from './EditableCell';
 
@@ -134,14 +135,24 @@ export default function RecordModal({
     onEditingChange?.(isEditing);
   };
 
-  const downloadImages = async (type: 'initial' | 'edited') => {
+  const downloadImages = async (type: 'initial' | 'edited' | 'prompt-only') => {
     if (!record) return;
 
-    const imageFieldPrefix = type === 'initial' ? 'initial_prompt_image' : 'edited_prompt_image';
+    let imageFieldPrefix: string;
+    let imageFieldNumbers: number[];
+    
+    if (type === 'prompt-only') {
+      imageFieldPrefix = 'prompt_only_image';
+      imageFieldNumbers = [1, 2, 3]; // Only 3 images for prompt-only
+    } else {
+      imageFieldPrefix = type === 'initial' ? 'initial_prompt_image' : 'edited_prompt_image';
+      imageFieldNumbers = [1, 2, 3, 4, 5]; // 5 images for initial/edited
+    }
+    
     const referenceImage = String(record.fields['reference_image'] || 'unknown');
     
     // Get all image fields for this type
-    const imageFields = [1, 2, 3, 4, 5].map(i => `${imageFieldPrefix}_${i}`);
+    const imageFields = imageFieldNumbers.map(i => `${imageFieldPrefix}_${i}`);
     
     // Filter to only include fields with actual images
     const imageUrls: Array<{ url: string; filename: string }> = [];
@@ -304,6 +315,15 @@ export default function RecordModal({
 
           {/* Content */}
           <div className="p-6 space-y-8">
+            {/* Prompt-Only Section */}
+            <PromptOnlyImageSection
+              record={record}
+              onSave={handleCellSave}
+              selectedModelInfo={selectedModelInfo}
+              onEditingChange={handleEditingChange}
+              onDownload={() => downloadImages('prompt-only')}
+            />
+
             {/* Initial Prompt Section */}
             <PromptImageSection
               record={record}
@@ -312,7 +332,7 @@ export default function RecordModal({
               selectedModelInfo={selectedModelInfo}
               availableModels={availableModels}
               onEditingChange={handleEditingChange}
-              onDownload={downloadImages}
+              onDownload={(type) => downloadImages(type)}
             />
 
             {/* Edited Prompt Section */}
@@ -323,7 +343,7 @@ export default function RecordModal({
               selectedModelInfo={selectedModelInfo}
               availableModels={availableModels}
               onEditingChange={handleEditingChange}
-              onDownload={downloadImages}
+              onDownload={(type) => downloadImages(type)}
             />
 
             {/* Status Section */}

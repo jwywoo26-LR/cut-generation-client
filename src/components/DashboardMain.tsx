@@ -7,8 +7,9 @@ import {
   InitialImageGeneration
 } from './dashboard';
 import EditedPromptImageGeneration from './dashboard/EditedPromptImageGeneration';
+import PromptOnlyImageGeneration from './dashboard/PromptOnlyImageGeneration';
 
-type TabType = 'dashboard' | 'prompt_gen' | 'initial_img_gen' | 'edited_img_gen';
+type TabType = 'dashboard' | 'prompt_gen' | 'prompt_only_img_gen' | 'initial_img_gen' | 'edited_img_gen';
 
 interface DashboardProps {
   currentTable?: string;
@@ -25,6 +26,7 @@ export default function DashboardMain({ currentTable, onPromptGenerated, records
   const tabs = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: '📊' },
     { id: 'prompt_gen' as TabType, label: 'Prompt Generation', icon: '✍️' },
+    { id: 'prompt_only_img_gen' as TabType, label: 'Prompt Only Gen', icon: '💭' },
     { id: 'initial_img_gen' as TabType, label: 'Initial Image Gen', icon: '🎨' },
     { id: 'edited_img_gen' as TabType, label: 'Edited Image Gen', icon: '✨' }
   ];
@@ -35,6 +37,8 @@ export default function DashboardMain({ currentTable, onPromptGenerated, records
         return <DashboardOverview />;
       case 'prompt_gen':
         return <PromptGeneration currentTable={currentTable} onPromptGenerated={onPromptGenerated} />;
+      case 'prompt_only_img_gen':
+        return <PromptOnlyImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} records={records} />;
       case 'initial_img_gen':
         return <InitialImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} records={records} />;
       case 'edited_img_gen':

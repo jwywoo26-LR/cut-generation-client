@@ -71,6 +71,43 @@ class ImageAPIClient {
     }
   }
 
+  async generateImageFromPromptOnly(
+    prompt: string,
+    bodyModelId: string,
+    width: number = 1024,
+    height: number = 1024,
+    fastMode: boolean = false
+  ): Promise<ImageAPIResponse> {
+    const payload = {
+      body_model_id: bodyModelId,
+      prompt: prompt,
+      width: width,
+      height: height,
+      simple_tag_ids: [],
+      fast_mode: fastMode
+    };
+    
+    const url = `${this.baseUrl}/api/image-generation/prompt-only`;
+    
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: this.headers,
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Prompt-only generation API request failed: ${response.status} - ${errorText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error('Prompt-only generation API request failed:', error);
+      throw error;
+    }
+  }
+
   async checkTaskStatus(synthId: string): Promise<ImageAPIResponse> {
     const url = `${this.baseUrl}/api/v1/image-tasks/${synthId}/status`;
     
@@ -278,17 +315,30 @@ export async function POST(request: Request) {
     // Filter records that need image generation
     const promptField = generationType === 'initial' ? 'initial_prompt' : 'edited_prompt';
     const imageFields: string[] = [];
-    const imageFieldPrefix = generationType === 'initial' ? 'initial_prompt_image' : 'edited_prompt_image';
+    let imageFieldPrefix: string;
+    let maxImages: number;
     
-    // Use numbered fields only (1-5) - assume they exist even if empty (Airtable doesn't return empty fields)
-    for (let i = 1; i <= Math.min(imageCount, 5); i++) {
+    // Set image field prefix and max images based on generation type
+    if (generationType === 'prompt-only') {
+      imageFieldPrefix = 'prompt_only_image';
+      maxImages = 3; // Maximum 3 images for prompt-only generation
+    } else if (generationType === 'initial') {
+      imageFieldPrefix = 'initial_prompt_image';
+      maxImages = 5;
+    } else {
+      imageFieldPrefix = 'edited_prompt_image';
+      maxImages = 5;
+    }
+    
+    // Use numbered fields only - assume they exist even if empty (Airtable doesn't return empty fields)
+    for (let i = 1; i <= Math.min(imageCount, maxImages); i++) {
       const fieldName = `${imageFieldPrefix}_${i}`;
       imageFields.push(fieldName); // Add all requested fields since empty fields aren't returned by Airtable
     }
     
-    // Log warning if requested more than 5 images
-    if (imageCount > 5) {
-      console.log(`Warning: Maximum 5 images supported, generating 5 images instead of ${imageCount}`);
+    // Log warning if requested more than max images
+    if (imageCount > maxImages) {
+      console.log(`Warning: Maximum ${maxImages} images supported for ${generationType}, generating ${maxImages} images instead of ${imageCount}`);
     }
     
     // Update imageCount to match available fields
@@ -308,7 +358,7 @@ export async function POST(request: Request) {
         return false;
       }
       
-      // Different status requirements for initial vs edited generation
+      // Different status requirements for initial vs edited vs prompt-only generation
       if (generationType === 'initial') {
         // Allow if result_status is "prompt_generated" (ready for images)
         const allowsGeneration = resultStatus === 'prompt_generated';
@@ -318,6 +368,12 @@ export async function POST(request: Request) {
       } else if (generationType === 'edited') {
         // For edited generation, only allow when result_status is "initial_prompt_image_generated" (initial generation complete)
         if (resultStatus !== 'initial_prompt_image_generated') {
+          return false;
+        }
+      } else if (generationType === 'prompt-only') {
+        // For prompt-only generation, allow if result_status is "prompt_generated" (ready for images)
+        const allowsGeneration = resultStatus === 'prompt_generated';
+        if (!allowsGeneration) {
           return false;
         }
       }
@@ -345,9 +401,14 @@ export async function POST(request: Request) {
     const results = [];
     
     // First, update result_status for all records to prevent duplicate requests
-    const statusValue = generationType === 'initial' 
-      ? 'initial_prompt_image_request_sent'
-      : 'edited_prompt_image_request_sent';
+    let statusValue: string;
+    if (generationType === 'initial') {
+      statusValue = 'initial_prompt_image_request_sent';
+    } else if (generationType === 'edited') {
+      statusValue = 'edited_prompt_image_request_sent';
+    } else {
+      statusValue = 'prompt_only_image_request_sent';
+    }
     
     for (const record of recordsNeedingImages) {
       try {
@@ -373,22 +434,30 @@ export async function POST(request: Request) {
       try {
         const prompt = record.fields[promptField];
         
-        // Get reference image
+        // Get reference image (for dimensions or actual generation depending on type)
         const referenceImageField = record.fields.reference_image_attached;
         let referenceImageBase64 = '';
-        
         let referenceImageUrl = '';
+        
         if (referenceImageField && Array.isArray(referenceImageField) && referenceImageField.length > 0) {
           referenceImageUrl = referenceImageField[0].url;
-          referenceImageBase64 = await fetchImageAsBase64(referenceImageUrl);
+          // For prompt-only generation, we don't need the base64 image data, just the URL for dimensions
+          if (generationType !== 'prompt-only') {
+            referenceImageBase64 = await fetchImageAsBase64(referenceImageUrl);
+          }
         } else {
-          console.log(`Skipping record ${record.id}: No reference image found`);
-          results.push({
-            recordId: record.id,
-            status: 'error',
-            error: 'No reference image found'
-          });
-          continue;
+          // For prompt-only generation, reference image is optional (only for dimensions)
+          if (generationType === 'prompt-only') {
+            console.log(`Record ${record.id}: No reference image found for dimensions, using default 1024x1024`);
+          } else {
+            console.log(`Skipping record ${record.id}: No reference image found`);
+            results.push({
+              recordId: record.id,
+              status: 'error',
+              error: 'No reference image found'
+            });
+            continue;
+          }
         }
 
         // Use provided modelId or default from selected characters field
@@ -408,19 +477,33 @@ export async function POST(request: Request) {
           try {
             console.log(`Generating ${generationType} image ${i + 1}/${actualImageCount} for record ${record.id}`);
             
-            // Get optimal dimensions for the reference image
-            const imageDimensions = await getImageDimensions(referenceImageUrl);
-            const optimalDimensions = getOptimalDimensions(imageDimensions.width, imageDimensions.height);
+            // Get optimal dimensions
+            let optimalDimensions = { width: 1024, height: 1024 }; // Default dimensions
+            if (referenceImageUrl) {
+              const imageDimensions = await getImageDimensions(referenceImageUrl);
+              optimalDimensions = getOptimalDimensions(imageDimensions.width, imageDimensions.height);
+            }
             
-            // Start image generation with optimal dimensions
-            const generateResponse = await imageClient.generateImageWithReference(
-              prompt,
-              referenceImageBase64,
-              bodyModelId,
-              optimalDimensions.width,
-              optimalDimensions.height,
-              false
-            );
+            // Start image generation based on type
+            let generateResponse;
+            if (generationType === 'prompt-only') {
+              generateResponse = await imageClient.generateImageFromPromptOnly(
+                prompt,
+                bodyModelId,
+                optimalDimensions.width,
+                optimalDimensions.height,
+                false
+              );
+            } else {
+              generateResponse = await imageClient.generateImageWithReference(
+                prompt,
+                referenceImageBase64,
+                bodyModelId,
+                optimalDimensions.width,
+                optimalDimensions.height,
+                false
+              );
+            }
 
             const synthId = generateResponse.synth_id;
             if (!synthId) {
@@ -481,9 +564,13 @@ export async function POST(request: Request) {
 
         if (Object.keys(updateFields).length > 0) {
           // Set result_status after successful generation
-          updateFields.result_status = generationType === 'initial' 
-            ? 'initial_prompt_image_generated'
-            : 'edited_prompt_image_generated';
+          if (generationType === 'initial') {
+            updateFields.result_status = 'initial_prompt_image_generated';
+          } else if (generationType === 'edited') {
+            updateFields.result_status = 'edited_prompt_image_generated';
+          } else {
+            updateFields.result_status = 'prompt_only_image_generated';
+          }
           
           const updateResponse = await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -514,7 +601,9 @@ export async function POST(request: Request) {
               fields: { 
                 result_status: generationType === 'initial' 
                   ? 'initial_prompt_image_generated'
-                  : 'edited_prompt_image_generated'
+                  : generationType === 'edited'
+                  ? 'edited_prompt_image_generated'
+                  : 'prompt_only_image_generated'
               }
             })
           });
@@ -546,7 +635,9 @@ export async function POST(request: Request) {
               fields: { 
                 result_status: generationType === 'initial' 
                   ? 'initial_prompt_image_generated'
-                  : 'edited_prompt_image_generated'
+                  : generationType === 'edited'
+                  ? 'edited_prompt_image_generated'
+                  : 'prompt_only_image_generated'
               }
             })
           });
