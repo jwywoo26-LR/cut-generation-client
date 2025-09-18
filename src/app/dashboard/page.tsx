@@ -11,6 +11,7 @@ export default function DashboardPage() {
   const [availableModels, setAvailableModels] = useState<Array<{id: string; name: string; thumbnail?: string}>>([]);
   const [currentTable, setCurrentTable] = useState<string>('');
   const [refreshTrigger, setRefreshTrigger] = useState<number>(0);
+  const [records, setRecords] = useState<Array<{id: string; fields: Record<string, unknown>}>>([]);
 
   // Fetch models on component mount
   useEffect(() => {
@@ -76,13 +77,14 @@ export default function DashboardPage() {
       />
 
       {/* Dashboard with Tabs */}
-      <DashboardMain currentTable={currentTable} onPromptGenerated={handlePromptGenerated} />
+      <DashboardMain currentTable={currentTable} onPromptGenerated={handlePromptGenerated} records={records} />
 
       {/* Airtable Records */}
       <AirtableRecords 
         selectedModelId={selectedModelId} 
         onTableChange={setCurrentTable}
         refreshTrigger={refreshTrigger}
+        onRecordsChange={setRecords}
       />
 
       {/* Generation Controls */}

@@ -4,25 +4,29 @@ import { useState } from 'react';
 import {
   DashboardOverview,
   PromptGeneration,
-  InitialImageGeneration,
-  FinalImageGeneration
+  InitialImageGeneration
 } from './dashboard';
+import EditedPromptImageGeneration from './dashboard/EditedPromptImageGeneration';
 
-type TabType = 'dashboard' | 'prompt_gen' | 'initial_img_gen' | 'final_img_gen';
+type TabType = 'dashboard' | 'prompt_gen' | 'initial_img_gen' | 'edited_img_gen';
 
 interface DashboardProps {
   currentTable?: string;
   onPromptGenerated?: () => void;
+  records?: Array<{
+    id: string;
+    fields: Record<string, unknown>;
+  }>;
 }
 
-export default function DashboardMain({ currentTable, onPromptGenerated }: DashboardProps) {
+export default function DashboardMain({ currentTable, onPromptGenerated, records = [] }: DashboardProps) {
   const [activeTab, setActiveTab] = useState<TabType>('dashboard');
 
   const tabs = [
     { id: 'dashboard' as TabType, label: 'Dashboard', icon: '📊' },
     { id: 'prompt_gen' as TabType, label: 'Prompt Generation', icon: '✍️' },
     { id: 'initial_img_gen' as TabType, label: 'Initial Image Gen', icon: '🎨' },
-    { id: 'final_img_gen' as TabType, label: 'Final Image Gen', icon: '🖼️' }
+    { id: 'edited_img_gen' as TabType, label: 'Edited Image Gen', icon: '✨' }
   ];
 
   const renderTabContent = () => {
@@ -32,9 +36,9 @@ export default function DashboardMain({ currentTable, onPromptGenerated }: Dashb
       case 'prompt_gen':
         return <PromptGeneration currentTable={currentTable} onPromptGenerated={onPromptGenerated} />;
       case 'initial_img_gen':
-        return <InitialImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} />;
-      case 'final_img_gen':
-        return <FinalImageGeneration />;
+        return <InitialImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} records={records} />;
+      case 'edited_img_gen':
+        return <EditedPromptImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} records={records} />;
       default:
         return null;
     }

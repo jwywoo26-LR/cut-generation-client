@@ -23,6 +23,7 @@ interface RecordsTableProps {
     name: string;
     thumbnail?: string;
   }>;
+  onEditingChange?: (isEditing: boolean) => void;
 }
 
 // Required columns for the application - should match the schema
@@ -33,7 +34,11 @@ const REQUIRED_COLUMNS = [
   'reference_image_attached',
   'selected_characters',
   'status',
-  'initial_prompt_image',
+  'initial_prompt_image_1',
+  'initial_prompt_image_2',
+  'initial_prompt_image_3',
+  'initial_prompt_image_4',
+  'initial_prompt_image_5',
   'edited_prompt_image_1',
   'edited_prompt_image_2',
   'edited_prompt_image_3',
@@ -47,10 +52,33 @@ export default function RecordsTable({
   tableName,
   onRecordUpdate,
   selectedModelInfo,
-  availableModels
+  availableModels,
+  onEditingChange
 }: RecordsTableProps) {
-  // Use required columns to ensure all schema fields are shown
-  const allFieldNames = REQUIRED_COLUMNS;
+  // Filter out empty image columns for display
+  const getVisibleColumns = () => {
+    const imageColumns = [
+      'initial_prompt_image_1', 'initial_prompt_image_2', 'initial_prompt_image_3', 
+      'initial_prompt_image_4', 'initial_prompt_image_5',
+      'edited_prompt_image_1', 'edited_prompt_image_2', 'edited_prompt_image_3',
+      'edited_prompt_image_4', 'edited_prompt_image_5'
+    ];
+    
+    const nonImageColumns = REQUIRED_COLUMNS.filter(col => !imageColumns.includes(col));
+    
+    // Check which image columns have content in any record
+    const visibleImageColumns = imageColumns.filter(col => 
+      records.some(record => 
+        record.fields[col] && 
+        (typeof record.fields[col] === 'string' && record.fields[col].startsWith('http') ||
+         Array.isArray(record.fields[col]) && record.fields[col].length > 0)
+      )
+    );
+    
+    return [...nonImageColumns, ...visibleImageColumns];
+  };
+  
+  const allFieldNames = getVisibleColumns();
 
   // Sort records by reference_image field
   const sortedRecords = [...records].sort((a, b) => {
@@ -141,6 +169,7 @@ export default function RecordsTable({
                     recordFields={record.fields}
                     selectedModelInfo={selectedModelInfo}
                     availableModels={availableModels}
+                    onEditingChange={onEditingChange}
                   />
                 </td>
               ))}

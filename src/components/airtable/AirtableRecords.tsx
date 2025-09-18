@@ -14,13 +14,15 @@ interface AirtableRecordsProps {
   selectedModelId?: string;
   onTableChange?: (tableName: string) => void;
   refreshTrigger?: number;
+  onRecordsChange?: (records: AirtableRecord[]) => void;
 }
 
-export default function AirtableRecords({ selectedModelId, onTableChange, refreshTrigger }: AirtableRecordsProps) {
+export default function AirtableRecords({ selectedModelId, onTableChange, refreshTrigger, onRecordsChange }: AirtableRecordsProps) {
   const [selectedTable, setSelectedTable] = useState<string>('');
   const [records, setRecords] = useState<AirtableRecord[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [models, setModels] = useState<Array<{id: string; name: string; thumbnail?: string}>>([]);
+  const [hasActiveEdits, setHasActiveEdits] = useState(false);
 
   // Fetch models on component mount
   useEffect(() => {
@@ -33,6 +35,30 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
       fetchRecords(selectedTable);
     }
   }, [refreshTrigger, selectedTable]);
+
+  // Auto-refresh when generation jobs are active (every 60 seconds)
+  useEffect(() => {
+    if (!selectedTable) return;
+    
+    // Check if any records are currently processing
+    const hasActiveJobs = records.some(record => {
+      const status = String(record.fields.status || '');
+      return status === 'generation_request_sent' || status === 'initial_request_sent';
+    });
+    
+    if (!hasActiveJobs) return; // No active jobs, no need to auto-refresh
+    
+    const interval = setInterval(() => {
+      if (hasActiveEdits) {
+        console.log('Skipping auto-refresh - user is editing');
+        return;
+      }
+      console.log('Auto-refreshing records due to active generation jobs...');
+      fetchRecords(selectedTable);
+    }, 60000); // Refresh every 60 seconds
+    
+    return () => clearInterval(interval);
+  }, [records, selectedTable, hasActiveEdits]);
 
   const fetchModels = async () => {
     try {
@@ -56,11 +82,11 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
     : undefined;
 
   const handleRecordUpdate = (updatedRecord: AirtableRecord) => {
-    setRecords(prevRecords => 
-      prevRecords.map(record => 
-        record.id === updatedRecord.id ? updatedRecord : record
-      )
+    const updatedRecords = records.map(record => 
+      record.id === updatedRecord.id ? updatedRecord : record
     );
+    setRecords(updatedRecords);
+    onRecordsChange?.(updatedRecords);
   };
 
   const fetchRecords = async (tableName: string) => {
@@ -70,6 +96,7 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
       if (response.ok) {
         const data = await response.json();
         setRecords(data.records);
+        onRecordsChange?.(data.records);
       } else {
         console.error('Failed to fetch records');
         setRecords([]);
@@ -103,10 +130,34 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
           Airtable Records
         </h2>
         
-        <TableSelector 
-          selectedTable={selectedTable}
-          onTableSelect={handleTableSelect}
-        />
+        <div className="flex items-center gap-3">
+          <TableSelector 
+            selectedTable={selectedTable}
+            onTableSelect={handleTableSelect}
+          />
+          
+          {selectedTable && (
+            <button
+              onClick={() => fetchRecords(selectedTable)}
+              disabled={isLoading}
+              className={`
+                px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center gap-2
+                ${isLoading
+                  ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }
+              `}
+              title="Refresh records"
+            >
+              {isLoading ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              ) : (
+                <span>🔄</span>
+              )}
+              Refresh
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Records Display */}
@@ -118,6 +169,7 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
           onRecordUpdate={handleRecordUpdate}
           selectedModelInfo={selectedModelInfo}
           availableModels={models}
+          onEditingChange={setHasActiveEdits}
         />
       ) : (
         <div className="text-center py-8">

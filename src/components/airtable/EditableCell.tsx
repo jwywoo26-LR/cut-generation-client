@@ -20,6 +20,7 @@ interface EditableCellProps {
     name: string;
     thumbnail?: string;
   }>;
+  onEditingChange?: (isEditing: boolean) => void;
 }
 
 export default function EditableCell({ 
@@ -30,7 +31,8 @@ export default function EditableCell({
   isEditable = true,
   recordFields = {},
   selectedModelInfo,
-  availableModels = []
+  availableModels = [],
+  onEditingChange
 }: EditableCellProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState('');
@@ -53,12 +55,14 @@ export default function EditableCell({
     if (typeof value === 'string' && !value.startsWith('http')) {
       setEditValue(String(value));
       setIsEditing(true);
+      onEditingChange?.(true);
     }
   };
 
   const handleSave = async () => {
     if (editValue.trim() === String(value)) {
       setIsEditing(false);
+      onEditingChange?.(false);
       return;
     }
 
@@ -66,6 +70,7 @@ export default function EditableCell({
     try {
       await onSave(recordId, fieldKey, editValue.trim());
       setIsEditing(false);
+      onEditingChange?.(false);
     } catch (error) {
       console.error('Failed to save:', error);
       // Reset to original value on error
@@ -78,6 +83,7 @@ export default function EditableCell({
   const handleCancel = () => {
     setEditValue(String(value));
     setIsEditing(false);
+    onEditingChange?.(false);
   };
 
   const handleCopyPrompt = async (sourceField: string) => {

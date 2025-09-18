@@ -160,22 +160,25 @@ export async function POST(request: Request) {
 
     const airtableData = await airtableResponse.json();
     
-    // Filter records that need prompt generation (must have reference image but no prompts yet)
+    // Filter records that need prompt generation
     const recordsNeedingPrompts = airtableData.records.filter((record: any) => {
       // Must have reference image
       const hasReference = record.fields.reference_image_attached && 
                           Array.isArray(record.fields.reference_image_attached) && 
                           record.fields.reference_image_attached.length > 0;
       
-      // Must NOT have initial_prompt yet
       const hasInitialPrompt = record.fields.initial_prompt && 
                               record.fields.initial_prompt.trim() !== '';
+      const status = String(record.fields.status || '');
       
-      // Check if status allows prompt generation (not currently processing)
-      const status = record.fields.status || '';
-      const isProcessing = status === 'initial_request_sent' || status === 'prompt_generating';
+      // Records that need prompt generation:
+      // 1. Have reference image
+      // 2. Either: No initial_prompt yet, OR status is "True" (allowing regeneration)
+      // 3. Not currently processing (not initial_request_sent or generation_request_sent)
+      const isProcessing = status === 'initial_request_sent' || status === 'generation_request_sent';
+      const allowsGeneration = !hasInitialPrompt || status === '' || status === 'True';
       
-      return hasReference && !hasInitialPrompt && !isProcessing;
+      return hasReference && allowsGeneration && !isProcessing;
     });
 
     if (recordsNeedingPrompts.length === 0) {
@@ -186,6 +189,24 @@ export async function POST(request: Request) {
     }
 
     const results = [];
+    
+    // First, set status to "initial_request_sent" for all records to prevent duplicates
+    for (const record of recordsNeedingPrompts) {
+      try {
+        await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+          method: 'PATCH',
+          headers: {
+            'Authorization': `Bearer ${apiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            fields: { status: 'initial_request_sent' }
+          })
+        });
+      } catch (error) {
+        console.error(`Failed to update status for record ${record.id}:`, error);
+      }
+    }
     
     // Process each record
     for (const record of recordsNeedingPrompts) {
@@ -200,6 +221,17 @@ export async function POST(request: Request) {
 
         if (!imageUrl) {
           console.log(`Skipping record ${record.id}: No reference image found`);
+          // Set status to "False" for records without reference images
+          await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fields: { status: 'False' }
+            })
+          });
           continue;
         }
 
@@ -246,6 +278,23 @@ export async function POST(request: Request) {
 
       } catch (error) {
         console.error(`Error processing record ${record.id}:`, error);
+        
+        // Set status to "False" on error
+        try {
+          await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+            method: 'PATCH',
+            headers: {
+              'Authorization': `Bearer ${apiKey}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              fields: { status: 'False' }
+            })
+          });
+        } catch (statusError) {
+          console.error(`Failed to set error status for record ${record.id}:`, statusError);
+        }
+        
         results.push({
           recordId: record.id,
           status: 'error',

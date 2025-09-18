@@ -41,6 +41,11 @@ export async function GET(request: Request) {
 
     const data = await response.json();
     
+    // Log fields for comparison with Image API
+    if (data.records.length > 0) {
+      console.log('RECORDS API - Available fields:', Object.keys(data.records[0].fields || {}));
+    }
+    
     // Transform records to a more usable format
     const records = data.records.map((record: {
       id: string;

@@ -156,9 +156,9 @@ export async function POST(request: Request) {
       );
     }
 
-    if (generationType !== 'initial') {
+    if (generationType !== 'initial' && generationType !== 'edited') {
       return NextResponse.json(
-        { error: 'Generation type must be "initial"' },
+        { error: 'Generation type must be "initial" or "edited"' },
         { status: 400 }
       );
     }
@@ -177,10 +177,11 @@ export async function POST(request: Request) {
     // Initialize Image API client
     const imageClient = new ImageAPIClient();
 
-    // Fetch records from Airtable
+    // Fetch records from Airtable (using same pattern as working Records API)
+    const encodedTableName = encodeURIComponent(tableName);
     const airtableUrl = recordIds && recordIds.length > 0
-      ? `https://api.airtable.com/v0/${airtableBaseId}/${tableName}?${recordIds.map((id: string) => `filterByFormula=RECORD_ID()="${id}"`).join('&')}`
-      : `https://api.airtable.com/v0/${airtableBaseId}/${tableName}`;
+      ? `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}?maxRecords=50&${recordIds.map((id: string) => `filterByFormula=RECORD_ID()="${id}"`).join('&')}`
+      : `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}?maxRecords=50`;
 
     const airtableResponse = await fetch(airtableUrl, {
       headers: {
@@ -195,34 +196,74 @@ export async function POST(request: Request) {
 
     const airtableData = await airtableResponse.json();
     
-    // Filter records that need image generation
-    const promptField = 'initial_prompt';
-    const imageFields: string[] = [];
+    // Get available fields from the first record to see what actually exists
+    const availableFields = airtableData.records.length > 0 
+      ? Object.keys(airtableData.records[0].fields || {})
+      : [];
     
-    if (imageCount === 1) {
-      // Single image goes to initial_prompt_image
-      imageFields.push('initial_prompt_image');
-    } else {
-      // Multiple images go to initial_prompt_image_1, initial_prompt_image_2, etc.
-      for (let i = 1; i <= imageCount; i++) {
-        imageFields.push(`initial_prompt_image_${i}`);
-      }
+    console.log('IMAGE API - Available fields:', availableFields);
+    
+    
+    // Filter records that need image generation
+    const promptField = generationType === 'initial' ? 'initial_prompt' : 'edited_prompt';
+    const imageFields: string[] = [];
+    const imageFieldPrefix = generationType === 'initial' ? 'initial_prompt_image' : 'edited_prompt_image';
+    
+    // Use numbered fields only (1-5) - assume they exist even if empty (Airtable doesn't return empty fields)
+    for (let i = 1; i <= Math.min(imageCount, 5); i++) {
+      const fieldName = `${imageFieldPrefix}_${i}`;
+      imageFields.push(fieldName); // Add all requested fields since empty fields aren't returned by Airtable
     }
+    
+    // Log warning if requested more than 5 images
+    if (imageCount > 5) {
+      console.log(`Warning: Maximum 5 images supported, generating 5 images instead of ${imageCount}`);
+    }
+    
+    // Update imageCount to match available fields
+    const actualImageCount = imageFields.length;
+    console.log(`Available image fields: ${imageFields.join(', ')}`);
+    console.log(`Will generate ${actualImageCount} image(s) instead of requested ${imageCount}`);
 
     const recordsNeedingImages = airtableData.records.filter((record: any) => {
       const hasPrompt = record.fields[promptField] && record.fields[promptField].trim() !== '';
       const missingImages = imageFields.some(field => !record.fields[field]);
       
       // Check status field to prevent duplicate requests
-      const status = record.fields.status || '';
+      const status = String(record.fields.status || '');
       
-      // Block if initial_request_sent
-      if (status === 'initial_request_sent') {
+      
+      // Block if currently processing
+      if (status === 'initial_request_sent' || status === 'generation_request_sent') {
         return false;
       }
       
-      return hasPrompt && missingImages;
+      // Different status requirements for initial vs edited generation
+      if (generationType === 'initial') {
+        // Allow if status is "prompt_generated" (ready for images) or "True" (regeneration allowed)
+        const allowsGeneration = status === 'prompt_generated' || status === 'True';
+        if (!allowsGeneration) {
+          return false;
+        }
+      } else if (generationType === 'edited') {
+        // For edited generation, only allow when status is "False" (initial generation complete)
+        if (status !== 'False') {
+          return false;
+        }
+      }
+      
+      const result = hasPrompt && missingImages;
+      return result;
     });
+
+    if (imageFields.length === 0) {
+      return NextResponse.json({
+        message: `No numbered image fields found in table. Please add columns: initial_prompt_image_1, initial_prompt_image_2, etc.`,
+        availableFields,
+        requiredFields: ['initial_prompt_image_1', 'initial_prompt_image_2', 'initial_prompt_image_3', 'initial_prompt_image_4', 'initial_prompt_image_5'],
+        processedCount: 0
+      }, { status: 400 });
+    }
 
     if (recordsNeedingImages.length === 0) {
       return NextResponse.json({
@@ -234,7 +275,7 @@ export async function POST(request: Request) {
     const results = [];
     
     // First, update status for all records to prevent duplicate requests
-    const statusValue = 'initial_request_sent';
+    const statusValue = 'generation_request_sent';
     
     for (const record of recordsNeedingImages) {
       try {
@@ -289,10 +330,10 @@ export async function POST(request: Request) {
 
         const generatedImages = [];
         
-        // Generate images based on imageCount
-        for (let i = 0; i < imageCount; i++) {
+        // Generate images based on actualImageCount (available fields)
+        for (let i = 0; i < actualImageCount; i++) {
           try {
-            console.log(`Generating ${generationType} image ${i + 1}/${imageCount} for record ${record.id}`);
+            console.log(`Generating ${generationType} image ${i + 1}/${actualImageCount} for record ${record.id}`);
             
             // Start image generation
             const generateResponse = await imageClient.generateImageWithReference(
@@ -362,8 +403,8 @@ export async function POST(request: Request) {
         });
 
         if (Object.keys(updateFields).length > 0) {
-          // Add status clear to the update
-          updateFields.status = '';
+          // Set status to "False" after successful generation
+          updateFields.status = 'False';
           
           const updateResponse = await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -377,10 +418,13 @@ export async function POST(request: Request) {
           });
 
           if (!updateResponse.ok) {
-            throw new Error(`Failed to update record ${record.id}`);
+            const errorText = await updateResponse.text();
+            console.error(`Airtable update failed for ${record.id}:`, errorText);
+            console.error(`Trying to update fields:`, Object.keys(updateFields));
+            throw new Error(`Failed to update record ${record.id}: ${updateResponse.status} - ${errorText}`);
           }
         } else {
-          // Even if no images were generated, clear the status
+          // Even if no images were generated, set status to "False"
           await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
             headers: {
@@ -388,7 +432,7 @@ export async function POST(request: Request) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              fields: { status: '' }
+              fields: { status: 'False' }
             })
           });
         }
@@ -407,7 +451,7 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error(`Error processing record ${record.id}:`, error);
         
-        // Clear status on error
+        // Set status to "False" on error
         try {
           await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -416,11 +460,11 @@ export async function POST(request: Request) {
               'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-              fields: { status: '' }
+              fields: { status: 'False' }
             })
           });
         } catch (statusError) {
-          console.error(`Failed to clear status for record ${record.id}:`, statusError);
+          console.error(`Failed to set error status for record ${record.id}:`, statusError);
         }
         
         results.push({
