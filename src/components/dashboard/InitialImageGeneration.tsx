@@ -26,6 +26,7 @@ export default function InitialImageGeneration({ currentTable, onImagesGenerated
   const [error, setError] = useState<string>('');
   const [imageCount, setImageCount] = useState<number>(3);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isRemoving, setIsRemoving] = useState(false);
 
   const handleDownloadAll = async () => {
     console.log('Download button clicked');
@@ -111,6 +112,53 @@ export default function InitialImageGeneration({ currentTable, onImagesGenerated
       setError('Failed to download images');
     } finally {
       setIsDownloading(false);
+    }
+  };
+
+  const handleRemoveAllImages = async () => {
+    if (!currentTable || records.length === 0) {
+      setError('No images to remove');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Are you sure you want to remove ALL initial images from ${records.length} records? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+
+    setIsRemoving(true);
+    setError('');
+
+    try {
+      const response = await fetch('/api/airtable/clear-images', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          tableName: currentTable,
+          imageType: 'initial',
+          recordIds: records.map(r => r.id)
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to remove images');
+      }
+
+      const data = await response.json();
+      console.log('Successfully removed images:', data);
+      
+      // Trigger refresh of the AirtableRecords component
+      onImagesGenerated?.();
+      
+    } catch (error) {
+      console.error('Error removing images:', error);
+      setError(error instanceof Error ? error.message : 'Failed to remove images');
+    } finally {
+      setIsRemoving(false);
     }
   };
 
@@ -266,6 +314,28 @@ export default function InitialImageGeneration({ currentTable, onImagesGenerated
                 : !currentTable 
                   ? 'Select a table first'
                   : 'Download All Initial Images'
+              }
+            </button>
+
+            <button
+              onClick={handleRemoveAllImages}
+              disabled={isRemoving || !currentTable || records.length === 0}
+              className={`
+                px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2
+                ${isRemoving || !currentTable || records.length === 0
+                  ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  : 'bg-red-600 hover:bg-red-700 text-white'
+                }
+              `}
+            >
+              {isRemoving && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              )}
+              {isRemoving 
+                ? 'Removing...' 
+                : !currentTable 
+                  ? 'Select a table first'
+                  : 'Remove All Initial Images'
               }
             </button>
           </div>

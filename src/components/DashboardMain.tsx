@@ -2,14 +2,12 @@
 
 import { useState } from 'react';
 import {
-  DashboardOverview,
   PromptGeneration,
   InitialImageGeneration
 } from './dashboard';
 import EditedPromptImageGeneration from './dashboard/EditedPromptImageGeneration';
-import PromptOnlyImageGeneration from './dashboard/PromptOnlyImageGeneration';
 
-type TabType = 'dashboard' | 'prompt_gen' | 'prompt_only_img_gen' | 'initial_img_gen' | 'edited_img_gen';
+type TabType = 'prompt_gen' | 'initial_img_gen' | 'edited_img_gen';
 
 interface DashboardProps {
   currentTable?: string;
@@ -21,24 +19,18 @@ interface DashboardProps {
 }
 
 export default function DashboardMain({ currentTable, onPromptGenerated, records = [] }: DashboardProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('dashboard');
+  const [activeTab, setActiveTab] = useState<TabType>('prompt_gen');
 
   const tabs = [
-    { id: 'dashboard' as TabType, label: 'Dashboard', icon: '📊' },
-    { id: 'prompt_gen' as TabType, label: 'Prompt Generation', icon: '✍️' },
-    { id: 'prompt_only_img_gen' as TabType, label: 'Prompt Only Gen', icon: '💭' },
-    { id: 'initial_img_gen' as TabType, label: 'Initial Image Gen', icon: '🎨' },
-    { id: 'edited_img_gen' as TabType, label: 'Edited Image Gen', icon: '✨' }
+    { id: 'prompt_gen' as TabType, label: 'Prompt Generation', icon: '' },
+    { id: 'initial_img_gen' as TabType, label: 'Initial Image Gen', icon: '' },
+    { id: 'edited_img_gen' as TabType, label: 'Edited Image Gen', icon: '' }
   ];
 
   const renderTabContent = () => {
     switch (activeTab) {
-      case 'dashboard':
-        return <DashboardOverview />;
       case 'prompt_gen':
         return <PromptGeneration currentTable={currentTable} onPromptGenerated={onPromptGenerated} />;
-      case 'prompt_only_img_gen':
-        return <PromptOnlyImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} records={records} />;
       case 'initial_img_gen':
         return <InitialImageGeneration currentTable={currentTable} onImagesGenerated={onPromptGenerated} records={records} />;
       case 'edited_img_gen':
@@ -58,14 +50,13 @@ export default function DashboardMain({ currentTable, onPromptGenerated, records
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
               className={`
-                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap flex items-center gap-2
+                py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
                 ${activeTab === tab.id
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
                   : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300'
                 }
               `}
             >
-              <span>{tab.icon}</span>
               {tab.label}
             </button>
           ))}

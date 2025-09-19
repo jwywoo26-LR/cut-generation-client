@@ -2,8 +2,6 @@
 
 import React, { useState } from 'react';
 import PromptImageSection from './modal/PromptImageSection';
-import PromptOnlyImageSection from './modal/PromptOnlyImageSection';
-import StatusSection from './modal/StatusSection';
 import EditableCell from './EditableCell';
 
 interface AirtableRecord {
@@ -135,19 +133,11 @@ export default function RecordModal({
     onEditingChange?.(isEditing);
   };
 
-  const downloadImages = async (type: 'initial' | 'edited' | 'prompt-only') => {
+  const downloadImages = async (type: 'initial' | 'edited') => {
     if (!record) return;
 
-    let imageFieldPrefix: string;
-    let imageFieldNumbers: number[];
-    
-    if (type === 'prompt-only') {
-      imageFieldPrefix = 'prompt_only_image';
-      imageFieldNumbers = [1, 2, 3]; // Only 3 images for prompt-only
-    } else {
-      imageFieldPrefix = type === 'initial' ? 'initial_prompt_image' : 'edited_prompt_image';
-      imageFieldNumbers = [1, 2, 3, 4, 5]; // 5 images for initial/edited
-    }
+    const imageFieldPrefix = type === 'initial' ? 'initial_prompt_image' : 'edited_prompt_image';
+    const imageFieldNumbers = [1, 2, 3, 4, 5]; // 5 images for initial/edited
     
     const referenceImage = String(record.fields['reference_image'] || 'unknown');
     
@@ -275,39 +265,80 @@ export default function RecordModal({
                 </div>
               </div>
               
-              {/* Reference fields in header */}
-              <div className="grid grid-cols-2 gap-6">
-                <div>
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              {/* Reference fields and regeneration in header */}
+              <div className="grid grid-cols-3 gap-2 text-xs">
+                <div className="min-h-0">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0">
                     Reference Image Attached
                   </div>
-                  <EditableCell
-                    value={record.fields['reference_image_attached'] || ''}
-                    fieldKey="reference_image_attached"
-                    recordId={record.id}
-                    onSave={handleCellSave}
-                    isEditable={false}
-                    recordFields={record.fields}
-                    selectedModelInfo={selectedModelInfo}
-                    availableModels={availableModels}
-                    onEditingChange={handleEditingChange}
-                  />
+                  <div className="text-xs leading-tight">
+                    <EditableCell
+                      value={record.fields['reference_image_attached'] || ''}
+                      fieldKey="reference_image_attached"
+                      recordId={record.id}
+                      onSave={handleCellSave}
+                      isEditable={false}
+                      recordFields={record.fields}
+                      selectedModelInfo={selectedModelInfo}
+                      availableModels={availableModels}
+                      onEditingChange={handleEditingChange}
+                    />
+                  </div>
                 </div>
-                <div>
-                  <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                <div className="min-h-0">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0">
                     Selected Characters
                   </div>
-                  <EditableCell
-                    value={record.fields['selected_characters'] || ''}
-                    fieldKey="selected_characters"
-                    recordId={record.id}
-                    onSave={handleCellSave}
-                    isEditable={true}
-                    recordFields={record.fields}
-                    selectedModelInfo={selectedModelInfo}
-                    availableModels={availableModels}
-                    onEditingChange={handleEditingChange}
-                  />
+                  <div className="text-xs leading-tight">
+                    <EditableCell
+                      value={record.fields['selected_characters'] || ''}
+                      fieldKey="selected_characters"
+                      recordId={record.id}
+                      onSave={handleCellSave}
+                      isEditable={true}
+                      recordFields={record.fields}
+                      selectedModelInfo={selectedModelInfo}
+                      availableModels={availableModels}
+                      onEditingChange={handleEditingChange}
+                    />
+                  </div>
+                </div>
+                <div className="min-h-0">
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0">
+                    Regeneration
+                  </div>
+                  <div className="flex items-center gap-2 mt-1">
+                    <button
+                      onClick={async () => {
+                        const resultStatus = String(record.fields['result_status'] || '');
+                        const canRegenerate = resultStatus.endsWith('_generated');
+                        if (canRegenerate) {
+                          const isRegenerating = record.fields['regeneration_status'] === true;
+                          const newValue = !isRegenerating;
+                          await handleCellSave(record.id, 'regeneration_status', String(newValue));
+                        }
+                      }}
+                      disabled={!String(record.fields['result_status'] || '').endsWith('_generated')}
+                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${
+                        record.fields['regeneration_status'] === true
+                          ? 'bg-blue-600'
+                          : 'bg-gray-200 dark:bg-gray-700'
+                      } ${
+                        !String(record.fields['result_status'] || '').endsWith('_generated')
+                          ? 'opacity-50 cursor-not-allowed' 
+                          : 'cursor-pointer'
+                      }`}
+                    >
+                      <span
+                        className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                          record.fields['regeneration_status'] === true ? 'translate-x-4' : 'translate-x-0.5'
+                        }`}
+                      />
+                    </button>
+                    <span className="text-xs text-gray-700 dark:text-gray-300">
+                      {record.fields['regeneration_status'] === true ? 'On' : 'Off'}
+                    </span>
+                  </div>
                 </div>
               </div>
             </div>
@@ -315,15 +346,6 @@ export default function RecordModal({
 
           {/* Content */}
           <div className="p-6 space-y-8">
-            {/* Prompt-Only Section */}
-            <PromptOnlyImageSection
-              record={record}
-              onSave={handleCellSave}
-              selectedModelInfo={selectedModelInfo}
-              onEditingChange={handleEditingChange}
-              onDownload={() => downloadImages('prompt-only')}
-            />
-
             {/* Initial Prompt Section */}
             <PromptImageSection
               record={record}
@@ -346,11 +368,6 @@ export default function RecordModal({
               onDownload={(type) => downloadImages(type)}
             />
 
-            {/* Status Section */}
-            <StatusSection
-              record={record}
-              onSave={handleCellSave}
-            />
           </div>
 
           {/* Footer */}
