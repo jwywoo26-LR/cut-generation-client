@@ -57,23 +57,93 @@ export default function LayerExtractorMain() {
 
     try {
       const JSZip = (await import('jszip')).default;
-      const zipData = await file.arrayBuffer();
 
-      console.log('ZIP file size:', zipData.byteLength, 'bytes');
-
-      const zip = await JSZip.loadAsync(zipData, {
-        checkCRC32: false // Skip CRC check for faster loading
+      console.log('ZIP file info:', {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: new Date(file.lastModified).toISOString()
       });
 
-      const psdFileNames = Object.keys(zip.files).filter(
-        name => !zip.files[name].dir &&
-               (name.toLowerCase().endsWith('.psd') || name.toLowerCase().endsWith('.psb')) &&
-               !name.startsWith('__MACOSX/') &&
-               !name.startsWith('._') &&
-               !name.includes('/.DS_Store')
-      );
+      const zipData = await file.arrayBuffer();
+      console.log('ZIP file loaded, size:', zipData.byteLength, 'bytes');
 
-      console.log('Found PSD files:', psdFileNames);
+      // Validate ZIP file signature
+      const signature = new Uint8Array(zipData.slice(0, 4));
+      const zipSignature = Array.from(signature).map(b => b.toString(16).padStart(2, '0')).join('');
+      console.log('ZIP signature:', zipSignature);
+
+      if (signature[0] !== 0x50 || signature[1] !== 0x4B) {
+        throw new Error('Invalid ZIP file signature. File may be corrupted or not a valid ZIP archive.');
+      }
+
+      let zip;
+      try {
+        // First attempt with strict options
+        zip = await JSZip.loadAsync(zipData, {
+          checkCRC32: false,
+          createFolders: false,
+          optimizedBinaryString: false
+        });
+      } catch (firstError) {
+        console.warn('First ZIP load attempt failed:', firstError);
+
+        try {
+          // Second attempt with more lenient options
+          zip = await JSZip.loadAsync(zipData, {
+            checkCRC32: false,
+            createFolders: true,
+            optimizedBinaryString: true,
+            decodeFileName: function(bytes) {
+              // Try to handle encoding issues
+              return new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(bytes));
+            }
+          });
+          console.log('ZIP loaded successfully on second attempt');
+        } catch (secondError) {
+          console.warn('Second ZIP load attempt failed:', secondError);
+
+          // Third attempt - most lenient
+          try {
+            zip = await JSZip.loadAsync(zipData.slice(0), {
+              checkCRC32: false,
+              createFolders: true,
+              optimizedBinaryString: true,
+              base64: false
+            });
+            console.log('ZIP loaded successfully on third attempt');
+          } catch (thirdError) {
+            throw new Error(`ZIP file is corrupted or incompatible. Central directory error: ${firstError.message}`);
+          }
+        }
+      }
+
+      // Log all files in ZIP for debugging
+      const allFiles = Object.keys(zip.files);
+      console.log('All files in ZIP:', allFiles);
+      console.log('Total files found:', allFiles.length);
+
+      const psdFileNames = allFiles.filter(name => {
+        const file = zip.files[name];
+        const isValidFile = !file.dir &&
+                           (name.toLowerCase().endsWith('.psd') || name.toLowerCase().endsWith('.psb')) &&
+                           !name.startsWith('__MACOSX/') &&
+                           !name.startsWith('._') &&
+                           !name.includes('/.DS_Store') &&
+                           !name.includes('/._');
+
+        if (name.toLowerCase().endsWith('.psd') || name.toLowerCase().endsWith('.psb')) {
+          console.log(`PSD/PSB file: ${name}`, {
+            isDir: file.dir,
+            size: file._data ? file._data.compressedSize : 'unknown',
+            valid: isValidFile
+          });
+        }
+
+        return isValidFile;
+      });
+
+      console.log('Valid PSD/PSB files found:', psdFileNames);
 
       if (psdFileNames.length === 0) {
         throw new Error('No PSD or PSB files found in the ZIP');
@@ -148,7 +218,19 @@ export default function LayerExtractorMain() {
 
     } catch (error) {
       console.error('Error analyzing ZIP file:', error);
-      setError(error instanceof Error ? error.message : 'Failed to analyze ZIP file');
+      let errorMessage = 'Failed to analyze ZIP file';
+
+      if (error instanceof Error) {
+        if (error.message.includes('Corrupted zip') || error.message.includes('expected') || error.message.includes('records')) {
+          errorMessage = 'ZIP file appears to be corrupted. Try:\n• Re-creating the ZIP file\n• Using a different compression tool\n• Checking the original PSD files are not corrupted';
+        } else if (error.message.includes('signature')) {
+          errorMessage = 'Invalid ZIP file format. Please ensure you upload a valid ZIP archive.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+
+      setError(errorMessage);
     } finally {
       setIsAnalyzing(false);
     }
@@ -179,9 +261,56 @@ export default function LayerExtractorMain() {
       // Import JSZip dynamically
       const JSZip = (await import('jszip')).default;
 
-      // Read the ZIP file
+      // Read the ZIP file with better error handling
+      console.log('Processing ZIP file:', selectedFile.name);
       const zipData = await selectedFile.arrayBuffer();
-      const zip = await JSZip.loadAsync(zipData);
+
+      // Validate ZIP signature
+      const signature = new Uint8Array(zipData.slice(0, 4));
+      if (signature[0] !== 0x50 || signature[1] !== 0x4B) {
+        throw new Error('Invalid ZIP file. Please ensure the file is a valid ZIP archive and not corrupted.');
+      }
+
+      let zip;
+      try {
+        // First attempt with strict options
+        zip = await JSZip.loadAsync(zipData, {
+          checkCRC32: false,
+          createFolders: false,
+          optimizedBinaryString: false
+        });
+      } catch (firstError) {
+        console.warn('First ZIP load attempt failed:', firstError);
+
+        try {
+          // Second attempt with more lenient options
+          zip = await JSZip.loadAsync(zipData, {
+            checkCRC32: false,
+            createFolders: true,
+            optimizedBinaryString: true,
+            decodeFileName: function(bytes) {
+              // Try to handle encoding issues
+              return new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(bytes));
+            }
+          });
+          console.log('ZIP loaded successfully on second attempt');
+        } catch (secondError) {
+          console.warn('Second ZIP load attempt failed:', secondError);
+
+          // Third attempt - most lenient
+          try {
+            zip = await JSZip.loadAsync(zipData.slice(0), {
+              checkCRC32: false,
+              createFolders: true,
+              optimizedBinaryString: true,
+              base64: false
+            });
+            console.log('ZIP loaded successfully on third attempt');
+          } catch (thirdError) {
+            throw new Error(`ZIP file is corrupted or incompatible. Central directory error: ${firstError.message}`);
+          }
+        }
+      }
 
       const psdFiles = Object.keys(zip.files).filter(
         name => !zip.files[name].dir &&
@@ -230,43 +359,141 @@ export default function LayerExtractorMain() {
             width: psd.width,
             height: psd.height,
             layerCount: psd.children?.length || 0,
-            layerNames: psd.children?.map(l => l.name) || []
+            layerNames: psd.children?.map(l => l.name) || [],
+            hasComposite: !!psd.canvas
           });
+
+          console.log(`=== DETAILED LAYER ANALYSIS FOR ${psdFileName} ===`);
+          if (psd.children) {
+            psd.children.forEach((layer, index) => {
+              console.log(`Layer ${index}: "${layer.name}", hasCanvas: ${!!layer.canvas}, hidden: ${layer.hidden}, opacity: ${layer.opacity}`);
+            });
+          }
+
+          // Helper function to render only the mosaic layer
+          const renderOnlyMosaicLayer = () => {
+            console.log('Creating mosaic mask...');
+            const maskCanvas = document.createElement('canvas');
+            const maskCtx = maskCanvas.getContext('2d');
+            if (!maskCtx) return null;
+
+            maskCanvas.width = psd.width || 800;
+            maskCanvas.height = psd.height || 600;
+
+            // Find and render only the mosaic layer
+            if (psd.children) {
+              for (const layer of psd.children) {
+                if (layer.name === '모자이크' && layer.canvas) {
+                  const x = layer.left || 0;
+                  const y = layer.top || 0;
+                  maskCtx.globalAlpha = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
+                  maskCtx.drawImage(layer.canvas, x, y);
+                  console.log(`✓ Rendered mosaic layer for mask at (${x}, ${y}) with opacity ${maskCtx.globalAlpha}`);
+                  break;
+                }
+              }
+            }
+
+            return maskCanvas;
+          };
+
+          // Helper function to create fallback canvas when no composite is available
+          const createFallbackCanvas = () => {
+            console.log('Creating fallback canvas from individual layers');
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) return null;
+
+            canvas.width = psd.width || 800;
+            canvas.height = psd.height || 600;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Simple layer combining for fallback
+            if (psd.children) {
+              for (const layer of [...psd.children].reverse()) {
+                if (layer.name !== '모자이크' && layer.canvas && !layer.hidden) {
+                  try {
+                    const x = layer.left || 0;
+                    const y = layer.top || 0;
+                    ctx.globalAlpha = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
+                    ctx.drawImage(layer.canvas, x, y);
+                    console.log(`✓ Drew fallback layer: "${layer.name}" at (${x}, ${y})`);
+                  } catch (e) {
+                    console.warn(`Failed to draw fallback layer "${layer.name}":`, e);
+                  }
+                }
+              }
+            }
+
+            return canvas;
+          };
 
           // No layer extraction in this simplified version - just combine layers
 
-          // Simple approach: combine all layers except mosaic
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          if (!ctx) continue;
-
-          canvas.width = psd.width || 800;
-          canvas.height = psd.height || 600;
-
-          console.log(`Combining layers (excluding mosaic)...`);
-
-          // Go through layers bottom to top (reverse order)
+          // Check if mosaic layer exists first
+          let foundMosaic = false;
           if (psd.children) {
-            const layers = [...psd.children].reverse();
-
-            for (const layer of layers) {
-              const layerName = layer.name || '';
-
-              // Skip mosaic layer
-              if (layerName === '모자이크') {
-                console.log(`Skipping mosaic layer: ${layerName}`);
-                continue;
-              }
-
-              // Draw layer if it has image data
-              if (layer.canvas) {
-                console.log(`Drawing layer: ${layerName}`);
-                ctx.drawImage(layer.canvas, layer.left || 0, layer.top || 0);
+            for (const layer of psd.children) {
+              if (layer.name === '모자이크') {
+                foundMosaic = true;
+                break;
               }
             }
           }
 
-          const finalCanvas = canvas;
+          // Use PSD composite if available, otherwise manually combine layers
+          let finalCanvas;
+
+          console.log(`=== RENDERING DECISION FOR ${psdFileName} ===`);
+          console.log(`Has PSD composite: ${!!psd.canvas}`);
+          console.log(`Found mosaic layer: ${foundMosaic}`);
+
+          if (!foundMosaic) {
+            // No mosaic layer - use PSD composite directly
+            console.log('✓ DECISION: Using PSD composite image (no mosaic layer found)');
+            finalCanvas = psd.canvas || createFallbackCanvas();
+          } else if (psd.canvas) {
+            // Mosaic layer exists - use PSD composite and paint over mosaic areas
+            console.log('✓ DECISION: Using PSD composite and painting over mosaic areas');
+
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+              console.error('Failed to get canvas context');
+              continue;
+            }
+
+            canvas.width = psd.width || 800;
+            canvas.height = psd.height || 600;
+
+            // Step 1: Draw the full PSD composite as base
+            console.log('Step 1: Drawing PSD composite as base');
+            ctx.drawImage(psd.canvas, 0, 0);
+
+            // Step 2: Draw "레이어 1" over the mosaic areas to cover them with clean content
+            console.log('Step 2: Drawing clean layers over mosaic areas');
+            if (psd.children) {
+              for (const layer of psd.children) {
+                if ((layer.name === '레이어 1' || layer.name?.startsWith('레이어')) && layer.canvas) {
+                  const x = layer.left || 0;
+                  const y = layer.top || 0;
+
+                  ctx.globalCompositeOperation = 'source-over';
+                  ctx.globalAlpha = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
+                  ctx.drawImage(layer.canvas, x, y);
+
+                  console.log(`✓ Drew clean layer "${layer.name}" at (${x}, ${y}) to cover mosaic areas`);
+                }
+              }
+            }
+
+            finalCanvas = canvas;
+          } else {
+            // Fallback: manual layer combining (if no composite available)
+            console.log('✓ DECISION: Fallback to manual layer combining (no composite available)');
+            finalCanvas = createFallbackCanvas();
+          }
 
           processedFiles.push({
             name: psdFileName,
@@ -462,13 +689,16 @@ export default function LayerExtractorMain() {
                 </div>
                 <div className="text-sm text-gray-600 dark:text-gray-300">
                   {allLayers.includes('모자이크') ? (
-                    <span className="text-green-600 dark:text-green-400">✓ Found in files</span>
+                    <span className="text-green-600 dark:text-green-400">✓ Found - will be removed</span>
                   ) : (
-                    <span className="text-orange-600 dark:text-orange-400">⚠ Not found</span>
+                    <span className="text-blue-600 dark:text-blue-400">ℹ None found - files will be combined as-is</span>
                   )}
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Will be automatically removed from output
+                  {allLayers.includes('모자이크')
+                    ? 'Mosaic layers will be removed from output'
+                    : 'All layers will be combined into clean images'
+                  }
                 </p>
               </div>
 
@@ -505,8 +735,8 @@ export default function LayerExtractorMain() {
                 {isProcessing && (
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
-                <span>🗑️</span>
-                {isProcessing ? 'Removing Mosaic...' : 'Remove Mosaic & Download'}
+                <span>🔄</span>
+                {isProcessing ? 'Processing Layers...' : 'Process & Download'}
               </button>
 
               <button
@@ -519,7 +749,7 @@ export default function LayerExtractorMain() {
             </div>
 
             <div className="text-xs text-gray-500 dark:text-gray-400">
-              Click &quot;Remove Mosaic &amp; Download&quot; to automatically process all PSD files and download a ZIP containing PNG versions with modified mosaic.
+              Click &quot;Process &amp; Download&quot; to automatically process all PSD files. If mosaic layers are found, they will be removed. All other layers will be combined into clean PNG files.
             </div>
           </div>
         </div>
