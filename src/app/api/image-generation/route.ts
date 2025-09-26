@@ -370,7 +370,8 @@ export async function POST(request: Request) {
           },
           body: JSON.stringify({
             fields: {
-              result_status: statusValue
+              result_status: statusValue,
+              regeneration_status: true
             }
           })
         });
@@ -491,10 +492,11 @@ export async function POST(request: Request) {
         });
 
         if (Object.keys(updateFields).length > 0) {
-          // Set result_status after successful generation
+          // Set result_status after successful generation and keep regeneration_status as true
           updateFields.result_status = generationType === 'initial' 
             ? 'initial_prompt_image_generated'
             : 'edited_prompt_image_generated';
+          updateFields.regeneration_status = true;
           
           const updateResponse = await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -514,7 +516,7 @@ export async function POST(request: Request) {
             throw new Error(`Failed to update record ${record.id}: ${updateResponse.status} - ${errorText}`);
           }
         } else {
-          // Even if no images were generated, set result_status to completion
+          // Even if no images were generated, set result_status to completion and regeneration_status to true
           await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
             headers: {
@@ -525,7 +527,8 @@ export async function POST(request: Request) {
               fields: { 
                 result_status: generationType === 'initial' 
                   ? 'initial_prompt_image_generated'
-                  : 'edited_prompt_image_generated'
+                  : 'edited_prompt_image_generated',
+                regeneration_status: true
               }
             })
           });
@@ -545,7 +548,7 @@ export async function POST(request: Request) {
       } catch (error) {
         console.error(`Error processing record ${record.id}:`, error);
         
-        // Set result_status to completion on error
+        // Set result_status to completion on error and regeneration_status to true
         try {
           await fetch(`https://api.airtable.com/v0/${airtableBaseId}/${tableName}/${record.id}`, {
             method: 'PATCH',
@@ -557,7 +560,8 @@ export async function POST(request: Request) {
               fields: { 
                 result_status: generationType === 'initial' 
                   ? 'initial_prompt_image_generated'
-                  : 'edited_prompt_image_generated'
+                  : 'edited_prompt_image_generated',
+                regeneration_status: true
               }
             })
           });

@@ -253,7 +253,7 @@ export async function POST(request: Request) {
         const updatePayload = {
           fields: {
             initial_prompt: initialPrompt,
-            status: 'prompt_generated'
+            result_status: 'prompt_generated'
           }
         };
 

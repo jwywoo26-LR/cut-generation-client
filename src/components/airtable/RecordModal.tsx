@@ -305,38 +305,36 @@ export default function RecordModal({
                 </div>
                 <div className="min-h-0">
                   <div className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-0">
-                    Regeneration
+                    Selected
                   </div>
                   <div className="flex items-center gap-2 mt-1">
-                    <button
-                      onClick={async () => {
+                    <input
+                      type="checkbox"
+                      checked={record.fields['regeneration_status'] === true}
+                      key={`${record.id}-${record.fields['regeneration_status']}`}
+                      onChange={async (e) => {
                         const resultStatus = String(record.fields['result_status'] || '');
                         const canRegenerate = resultStatus.endsWith('_generated');
                         if (canRegenerate) {
-                          const isRegenerating = record.fields['regeneration_status'] === true;
-                          const newValue = !isRegenerating;
-                          await handleCellSave(record.id, 'regeneration_status', String(newValue));
+                          const newValue = e.target.checked;
+                          console.log('Modal - Updating regeneration_status:', { recordId: record.id, newValue });
+                          try {
+                            await handleCellSave(record.id, 'regeneration_status', String(newValue));
+                            console.log('Modal - Update successful for record:', record.id);
+                          } catch (error) {
+                            console.error('Modal - Update failed for record:', record.id, error);
+                          }
                         }
                       }}
                       disabled={!String(record.fields['result_status'] || '').endsWith('_generated')}
-                      className={`relative inline-flex h-4 w-8 items-center rounded-full transition-colors ${
-                        record.fields['regeneration_status'] === true
-                          ? 'bg-blue-600'
-                          : 'bg-gray-200 dark:bg-gray-700'
-                      } ${
+                      className={`h-4 w-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 ${
                         !String(record.fields['result_status'] || '').endsWith('_generated')
                           ? 'opacity-50 cursor-not-allowed' 
                           : 'cursor-pointer'
                       }`}
-                    >
-                      <span
-                        className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
-                          record.fields['regeneration_status'] === true ? 'translate-x-4' : 'translate-x-0.5'
-                        }`}
-                      />
-                    </button>
+                    />
                     <span className="text-xs text-gray-700 dark:text-gray-300">
-                      {record.fields['regeneration_status'] === true ? 'On' : 'Off'}
+                      {record.fields['regeneration_status'] === true ? 'Selected' : 'Not Selected'}
                     </span>
                   </div>
                 </div>

@@ -227,52 +227,56 @@ export default function InitialImageGeneration({ currentTable, onImagesGenerated
           Initial Image Generation
         </h3>
         
-        <div className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300 text-sm">
-            Generate images for each record using the initial_prompt and reference_image_attached.
-            Images will be saved to numbered initial_prompt_image fields (1-5).
-            {currentTable && (
-              <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
-                Working with table: {currentTable}
-              </span>
-            )}
-          </p>
+        <div className="flex gap-6">
+          {/* Left column - Text and controls */}
+          <div className="flex-1 space-y-4">
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              Generate images for each record using the initial_prompt and reference_image_attached.
+              Images will be saved to numbered initial_prompt_image fields (1-5).
+              {currentTable && (
+                <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
+                  Working with table: {currentTable}
+                </span>
+              )}
+            </p>
 
-          <div className="space-y-3">
-            <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              Number of images per record:
-            </label>
-            
-            <select
-              value={imageCount}
-              onChange={(e) => setImageCount(Number(e.target.value))}
-              disabled={isGenerating}
-              className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
-            >
-              <option value={1}>1 image</option>
-              <option value={2}>2 images</option>
-              <option value={3}>3 images</option>
-              <option value={4}>4 images</option>
-              <option value={5}>5 images</option>
-            </select>
-          </div>
+            <div className="space-y-4">
+              <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Number of images per record:
+              </label>
 
-          <div className="space-y-3">
-            <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
-              <div className="text-blue-800 dark:text-blue-200 text-sm">
-                <strong>Required Columns:</strong> Your Airtable table must have numbered fields initial_prompt_image_1, initial_prompt_image_2, etc., up to the number you select.
+              <select
+                value={imageCount}
+                onChange={(e) => setImageCount(Number(e.target.value))}
+                disabled={isGenerating}
+                className="px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+              >
+                <option value={1}>1 image</option>
+                <option value={2}>2 images</option>
+                <option value={3}>3 images</option>
+                <option value={4}>4 images</option>
+                <option value={5}>5 images</option>
+              </select>
+            </div>
+
+            <div className="space-y-3">
+              <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-3">
+                <div className="text-blue-800 dark:text-blue-200 text-sm">
+                  <strong>Required Columns:</strong> Your Airtable table must have numbered fields initial_prompt_image_1, initial_prompt_image_2, etc., up to the number you select.
+                </div>
+              </div>
+
+              <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
+                <div className="text-yellow-800 dark:text-yellow-200 text-sm">
+                  <strong>Note:</strong> Image generation can take several minutes per image.
+                  The process will generate {imageCount} image{imageCount > 1 ? 's' : ''} per record using your selected model and reference images.
+                </div>
               </div>
             </div>
-            
-            <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3">
-              <div className="text-yellow-800 dark:text-yellow-200 text-sm">
-                <strong>Note:</strong> Image generation can take several minutes per image. 
-                The process will generate {imageCount} image{imageCount > 1 ? 's' : ''} per record using your selected model and reference images.
-              </div>
-            </div>
           </div>
 
-          <div className="flex gap-3">
+          {/* Right column - Buttons */}
+          <div className="flex-shrink-0 flex flex-col gap-3">
             <button
               onClick={handleGenerateImages}
               disabled={isGenerating || !currentTable}

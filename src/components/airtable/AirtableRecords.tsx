@@ -102,9 +102,11 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
     : undefined;
 
   const handleRecordUpdate = (updatedRecord: AirtableRecord) => {
+    console.log('Parent - handleRecordUpdate called with:', updatedRecord);
     const updatedRecords = records.map(record => 
       record.id === updatedRecord.id ? updatedRecord : record
     );
+    console.log('Parent - Updated records array:', updatedRecords);
     setRecords(updatedRecords);
     onRecordsChange?.(updatedRecords);
   };
@@ -125,18 +127,18 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
 
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-      <div className="flex items-center justify-between mb-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-6 flex-shrink-0">
         <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
           Airtable Records
         </h2>
-        
+
         <div className="flex items-center gap-3">
-          <TableSelector 
+          <TableSelector
             selectedTable={selectedTable}
             onTableSelect={handleTableSelect}
           />
-          
+
           {selectedTable && (
             <button
               onClick={() => fetchRecords(selectedTable)}
@@ -162,23 +164,25 @@ export default function AirtableRecords({ selectedModelId, onTableChange, refres
       </div>
 
       {/* Records Display */}
-      {selectedTable ? (
-        <RecordsTable 
-          records={records}
-          isLoading={isLoading}
-          tableName={selectedTable}
-          onRecordUpdate={handleRecordUpdate}
-          selectedModelInfo={selectedModelInfo}
-          availableModels={models}
-          onEditingChange={setHasActiveEdits}
-        />
-      ) : (
-        <div className="text-center py-8">
-          <p className="text-gray-500 dark:text-gray-400">
-            Select a table to view records.
-          </p>
-        </div>
-      )}
+      <div className="flex-1 overflow-hidden">
+        {selectedTable ? (
+          <RecordsTable
+            records={records}
+            isLoading={isLoading}
+            tableName={selectedTable}
+            onRecordUpdate={handleRecordUpdate}
+            selectedModelInfo={selectedModelInfo}
+            availableModels={models}
+            onEditingChange={setHasActiveEdits}
+          />
+        ) : (
+          <div className="text-center py-8">
+            <p className="text-gray-500 dark:text-gray-400">
+              Select a table to view records.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

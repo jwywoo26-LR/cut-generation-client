@@ -21,10 +21,45 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
   const [models, setModels] = useState<Model[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [expandedModel, setExpandedModel] = useState<Model | null>(null);
 
   useEffect(() => {
     fetchModels();
   }, []);
+
+  // Keyboard navigation for modal only
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (models.length === 0 || !expandedModel) return;
+
+      // Handle modal navigation only
+      const currentIndex = models.findIndex(m => m.id === expandedModel.id);
+      switch (e.key) {
+        case 'ArrowLeft':
+          e.preventDefault();
+          const prevIndex = currentIndex > 0 ? currentIndex - 1 : models.length - 1;
+          setExpandedModel(models[prevIndex]);
+          break;
+        case 'ArrowRight':
+          e.preventDefault();
+          const nextIndex = currentIndex < models.length - 1 ? currentIndex + 1 : 0;
+          setExpandedModel(models[nextIndex]);
+          break;
+        case 'Escape':
+          e.preventDefault();
+          setExpandedModel(null);
+          break;
+        case 'Enter':
+        case ' ':
+          e.preventDefault();
+          handleModelSelect(expandedModel.id);
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [models, expandedModel]);
 
   const fetchModels = async () => {
     setIsLoading(true);
@@ -89,7 +124,7 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
   };
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 h-full flex flex-col">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
         Model Selection
       </h2>
@@ -104,50 +139,74 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
           <p className="text-gray-500 dark:text-gray-400">No active models found.</p>
         </div>
       ) : (
-        <div className="overflow-x-auto pb-4">
-          <div className="flex gap-4 min-w-max">
+        <div className="flex-1 overflow-y-auto">
+          <div className="space-y-4">
             {models.map((model) => (
-            <div
-              key={model.id}
-              onClick={() => handleModelSelect(model.id)}
-              className={`
-                cursor-pointer rounded-lg border-2 p-4 transition-all hover:shadow-md flex-shrink-0 w-48
-                ${selectedModelId === model.id 
-                  ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
-                  : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                }
-              `}
-            >
-              <div className="flex flex-col items-center text-center space-y-3">
-                {model.thumbnail ? (
-                  <Image
-                    src={model.thumbnail}
-                    alt={model.name}
-                    width={256}
-                    height={256}
-                    className="w-64 h-64 rounded-md object-cover"
-                  />
-                ) : (
-                  <div className="w-64 h-64 rounded-md bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
-                    <span className="text-gray-500 dark:text-gray-400">No Image</span>
-                  </div>
-                )}
-                <div>
-                  <h3 className="font-medium text-gray-900 dark:text-white text-sm">
-                    {String(model.name)}
-                  </h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    ID: {String(model.id).slice(0, 12)}...
-                  </p>
+              <div
+                key={model.id}
+                className={`
+                  relative rounded-lg border-2 p-4 transition-all hover:shadow-md w-full
+                  ${selectedModelId === model.id
+                    ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
+                    : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
+                  }
+                `}
+              >
+                {/* Expand button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setExpandedModel(model);
+                  }}
+                  className="absolute top-2 right-2 p-1 bg-white dark:bg-gray-700 rounded-full shadow-md hover:shadow-lg transition-all z-10"
+                >
+                  <svg className="w-4 h-4 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                  </svg>
+                </button>
+
+                <div
+                  onClick={() => handleModelSelect(model.id)}
+                  className="cursor-pointer flex flex-col items-center text-center space-y-3"
+                >
+                  {model.thumbnail ? (
+                    <Image
+                      src={model.thumbnail}
+                      alt={model.name}
+                      width={200}
+                      height={200}
+                      className="w-50 h-50 rounded-md object-cover"
+                    />
+                  ) : (
+                    <div className="w-50 h-50 rounded-md bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                      <span className="text-gray-500 dark:text-gray-400">No Image</span>
+                    </div>
+                  )}
                 </div>
+
+                {/* Select button */}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleModelSelect(model.id);
+                  }}
+                  className={`
+                    w-full mt-3 px-3 py-2 rounded-md text-sm font-medium transition-all
+                    ${selectedModelId === model.id
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                    }
+                  `}
+                >
+                  {selectedModelId === model.id ? 'Selected' : 'Select'}
+                </button>
               </div>
-            </div>
             ))}
           </div>
         </div>
       )}
-      
-      <div className="mt-4 space-y-3">
+
+      <div className="mt-4 space-y-3 flex-shrink-0">
         {selectedModelId && (
           <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md">
             <p className="text-sm text-blue-800 dark:text-blue-200">
@@ -180,6 +239,78 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
           </div>
         )}
       </div>
+
+      {/* Modal for expanded image */}
+      {expandedModel && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+          onClick={() => setExpandedModel(null)}
+        >
+          <div
+            className="relative bg-white dark:bg-gray-800 rounded-lg p-6 max-w-4xl max-h-[90vh] overflow-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Close button */}
+            <button
+              onClick={() => setExpandedModel(null)}
+              className="absolute top-4 right-4 p-2 bg-gray-100 dark:bg-gray-700 rounded-full hover:bg-gray-200 dark:hover:bg-gray-600 transition-all"
+            >
+              <svg className="w-5 h-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+
+            {/* Modal content */}
+            <div className="flex flex-col items-center space-y-4">
+              <h3 className="text-2xl font-semibold text-gray-900 dark:text-white">
+                {expandedModel.name}
+              </h3>
+
+              {expandedModel.thumbnail ? (
+                <Image
+                  src={expandedModel.thumbnail}
+                  alt={expandedModel.name}
+                  width={600}
+                  height={600}
+                  className="max-w-full max-h-[60vh] rounded-lg object-contain"
+                />
+              ) : (
+                <div className="w-96 h-96 rounded-lg bg-gray-200 dark:bg-gray-600 flex items-center justify-center">
+                  <span className="text-gray-500 dark:text-gray-400 text-lg">No Image Available</span>
+                </div>
+              )}
+
+              <div className="text-center space-y-2">
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  <span className="font-medium">Model ID:</span> {expandedModel.id}
+                </p>
+                {expandedModel.description && (
+                  <p className="text-sm text-gray-600 dark:text-gray-400 max-w-lg">
+                    {expandedModel.description}
+                  </p>
+                )}
+              </div>
+
+              {/* Select button in modal */}
+              <button
+                onClick={() => {
+                  handleModelSelect(expandedModel.id);
+                  setExpandedModel(null);
+                }}
+                className={`
+                  px-6 py-3 rounded-lg text-sm font-medium transition-all
+                  ${selectedModelId === expandedModel.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'
+                  }
+                `}
+              >
+                {selectedModelId === expandedModel.id ? 'Selected' : 'Select Model'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

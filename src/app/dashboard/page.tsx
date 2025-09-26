@@ -18,50 +18,34 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="space-y-8">
-      {/* Model Selection */}
-      <ModelSelection 
-        selectedModelId={selectedModelId}
-        onModelSelect={setSelectedModelId}
-        currentTable={currentTable}
-        onTableSync={handlePromptGenerated}
-      />
+    <div className="flex gap-8 h-screen">
+      {/* Sidebar with Model Selection */}
+      <div className="w-80 flex-shrink-0">
+        <div className="h-full">
+          <ModelSelection
+            selectedModelId={selectedModelId}
+            onModelSelect={setSelectedModelId}
+            currentTable={currentTable}
+            onTableSync={handlePromptGenerated}
+          />
+        </div>
+      </div>
 
-      {/* Dashboard with Tabs */}
-      <DashboardMain currentTable={currentTable} onPromptGenerated={handlePromptGenerated} records={records} />
+      {/* Main Content */}
+      <div className="flex-1 flex flex-col h-full">
+        {/* Dashboard with Tabs */}
+        <div className="flex-shrink-0">
+          <DashboardMain currentTable={currentTable} onPromptGenerated={handlePromptGenerated} records={records} />
+        </div>
 
-      {/* Airtable Records */}
-      <AirtableRecords 
-        selectedModelId={selectedModelId} 
-        onTableChange={setCurrentTable}
-        refreshTrigger={refreshTrigger}
-        onRecordsChange={setRecords}
-      />
-
-      {/* Generation Controls */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
-          Generation Controls
-        </h2>
-        <div className="flex gap-4">
-          <button 
-            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:bg-gray-400"
-            disabled
-          >
-            Start Generation
-          </button>
-          <button 
-            className="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:bg-gray-400"
-            disabled
-          >
-            Stop All
-          </button>
-          <button 
-            className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 disabled:bg-gray-400"
-            disabled
-          >
-            Refresh Data
-          </button>
+        {/* Airtable Records - Scrollable */}
+        <div className="flex-1 overflow-hidden mt-8">
+          <AirtableRecords
+            selectedModelId={selectedModelId}
+            onTableChange={setCurrentTable}
+            refreshTrigger={refreshTrigger}
+            onRecordsChange={setRecords}
+          />
         </div>
       </div>
     </div>

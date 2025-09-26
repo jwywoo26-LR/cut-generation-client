@@ -74,38 +74,44 @@ export default function PromptGeneration({ currentTable, onPromptGenerated }: Pr
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
           Prompt Generation
         </h3>
-        
-        <div className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300 text-sm">
-            Generate initial and enhanced prompts for records that only have reference images filled.
-            {currentTable && (
-              <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
-                Working with table: {currentTable}
-              </span>
-            )}
-          </p>
 
-          <button
-            onClick={handleGeneratePrompts}
-            disabled={isGenerating || !currentTable}
-            className={`
-              px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2
-              ${isGenerating || !currentTable
-                ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white'
+        <div className="flex gap-6">
+          {/* Left column - Text */}
+          <div className="flex-1">
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              Generate initial and enhanced prompts for records that only have reference images filled.
+              {currentTable && (
+                <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
+                  Working with table: {currentTable}
+                </span>
+              )}
+            </p>
+          </div>
+
+          {/* Right column - Button */}
+          <div className="flex-shrink-0">
+            <button
+              onClick={handleGeneratePrompts}
+              disabled={isGenerating || !currentTable}
+              className={`
+                px-6 py-3 rounded-lg font-medium transition-colors flex items-center gap-2
+                ${isGenerating || !currentTable
+                  ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white'
+                }
+              `}
+            >
+              {isGenerating && (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+              )}
+              {isGenerating
+                ? 'Generating Prompts...'
+                : !currentTable
+                  ? 'Select a table first'
+                  : 'Generate Prompts'
               }
-            `}
-          >
-            {isGenerating && (
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-            )}
-            {isGenerating 
-              ? 'Generating Prompts...' 
-              : !currentTable 
-                ? 'Select a table first'
-                : 'Generate Prompts'
-            }
-          </button>
+            </button>
+          </div>
         </div>
       </div>
 

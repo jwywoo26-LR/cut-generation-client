@@ -45,7 +45,8 @@ export default function RecordsTable({
     'reference_image',
     'reference_image_attached', 
     'selected_characters',
-    'result_status'
+    'result_status',
+    'regeneration_status'
   ];
 
   // Sort records by reference_image field
@@ -90,6 +91,8 @@ export default function RecordsTable({
       }
 
       const result = await response.json();
+      console.log('API Response:', result);
+      console.log('Updated record:', result.record);
       
       // Update the record in the parent component
       onRecordUpdate(result.record);
@@ -124,7 +127,7 @@ export default function RecordsTable({
 
   return (
     <>
-      <div className="overflow-x-auto">
+      <div className="overflow-auto h-full">
         <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
           <thead className="bg-gray-50 dark:bg-gray-700">
             <tr>
@@ -133,7 +136,7 @@ export default function RecordsTable({
                   key={fieldName}
                   className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider"
                 >
-                  {fieldName.replace(/_/g, ' ')}
+                  {fieldName === 'regeneration_status' ? 'Selected' : fieldName.replace(/_/g, ' ')}
                 </th>
               ))}
               <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -146,17 +149,47 @@ export default function RecordsTable({
               <tr key={record.id} className="hover:bg-gray-50 dark:hover:bg-gray-700">
                 {compactColumns.map((fieldName) => (
                   <td key={`${record.id}-${fieldName}`} className="px-3 py-4 align-top">
-                    <EditableCell
-                      value={record.fields[fieldName] || ''}
-                      fieldKey={fieldName}
-                      recordId={record.id}
-                      onSave={handleCellSave}
-                      isEditable={fieldName === 'selected_characters'}
-                      recordFields={record.fields}
-                      selectedModelInfo={selectedModelInfo}
-                      availableModels={availableModels}
-                      onEditingChange={onEditingChange}
-                    />
+                    {fieldName === 'regeneration_status' ? (
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          checked={record.fields['regeneration_status'] === true}
+                          key={`${record.id}-${record.fields['regeneration_status']}`}
+                          onChange={async (e) => {
+                            const resultStatus = String(record.fields['result_status'] || '');
+                            const canRegenerate = resultStatus.endsWith('_generated');
+                            if (canRegenerate) {
+                              const newValue = e.target.checked;
+                              console.log('Updating regeneration_status:', { recordId: record.id, newValue });
+                              try {
+                                await handleCellSave(record.id, 'regeneration_status', String(newValue));
+                                console.log('Update successful for record:', record.id);
+                              } catch (error) {
+                                console.error('Update failed for record:', record.id, error);
+                              }
+                            }
+                          }}
+                          disabled={!String(record.fields['result_status'] || '').endsWith('_generated')}
+                          className={`h-4 w-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2 ${
+                            !String(record.fields['result_status'] || '').endsWith('_generated')
+                              ? 'opacity-50 cursor-not-allowed' 
+                              : 'cursor-pointer'
+                          }`}
+                        />
+                      </div>
+                    ) : (
+                      <EditableCell
+                        value={record.fields[fieldName] || ''}
+                        fieldKey={fieldName}
+                        recordId={record.id}
+                        onSave={handleCellSave}
+                        isEditable={fieldName === 'selected_characters'}
+                        recordFields={record.fields}
+                        selectedModelInfo={selectedModelInfo}
+                        availableModels={availableModels}
+                        onEditingChange={onEditingChange}
+                      />
+                    )}
                   </td>
                 ))}
                 <td className="px-3 py-4 align-top">

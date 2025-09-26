@@ -259,22 +259,24 @@ export default function EditedPromptImageGeneration({ currentTable, onImagesGene
           Edited Prompt Image Generation
         </h3>
         
-        <div className="space-y-4">
-          <p className="text-gray-600 dark:text-gray-300 text-sm">
-            Generate images using edited_prompt and reference_image_attached.
-            Images will be saved to numbered edited_prompt_image fields (1-5).
-            {currentTable && (
-              <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
-                Working with table: {currentTable}
-              </span>
-            )}
-          </p>
+        <div className="flex gap-6">
+          {/* Left column - Text and controls */}
+          <div className="flex-1 space-y-4">
+            <p className="text-gray-600 dark:text-gray-300 text-sm">
+              Generate images using edited_prompt and reference_image_attached.
+              Images will be saved to numbered edited_prompt_image fields (1-5).
+              {currentTable && (
+                <span className="block mt-1 text-blue-600 dark:text-blue-400 font-medium">
+                  Working with table: {currentTable}
+                </span>
+              )}
+            </p>
 
-          <div className="space-y-3">
+          <div className="space-y-4">
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               Number of images per record:
             </label>
-            
+
             <select
               value={imageCount}
               onChange={(e) => setImageCount(Number(e.target.value))}
@@ -315,8 +317,10 @@ export default function EditedPromptImageGeneration({ currentTable, onImagesGene
               </div>
             </div>
           </div>
+          </div>
 
-          <div className="flex gap-3">
+          {/* Right column - Buttons */}
+          <div className="flex-shrink-0 flex flex-col gap-3">
             <button
               onClick={handleGenerateImages}
               disabled={isGenerating || !currentTable || !allRecordsComplete}
