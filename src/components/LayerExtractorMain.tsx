@@ -35,17 +35,22 @@ export default function LayerExtractorMain() {
   const [allLayers, setAllLayers] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isZipFile = (f: File | null) => {
+    if (!f) return false;
+    const t = (f.type || '').toLowerCase();
+    if (t.includes('zip')) return true;          // handles application/zip, x-zip-compressed, etc.
+    return /\.zip$/i.test(f.name);               // fallback to extension
+  };
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file && file.type === 'application/zip') {
+    const file = e.target.files?.[0] || null;
+    if (isZipFile(file)) {
       setSelectedFile(file);
       setResult(null);
       setError('');
       setPsdFiles([]);
       setAllLayers([]);
-
-      // Automatically analyze the ZIP file
-      analyzeZipFile(file);
+      analyzeZipFile(file!);                      // you already check PK signature inside
     } else {
       setError('Please select a ZIP file containing PSD/PSB files');
     }
@@ -80,17 +85,27 @@ export default function LayerExtractorMain() {
       // Load ZIP file with fallback options for cross-platform compatibility
       let zip;
       try {
-        // First attempt: Default JSZip (works for most cases)
-        zip = await JSZip.loadAsync(zipData);
-      } catch (error) {
-
+        // First attempt: UTF-8 filename support for Windows
+        const utf8Decoder = (bytes: string[] | Buffer | Uint8Array) => {
+          if (bytes instanceof Uint8Array) {
+            return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          }
+          // Fallback for other types
+          return String(bytes);
+        };
+        zip = await JSZip.loadAsync(zipData, {
+          checkCRC32: false,
+          createFolders: true,
+          decodeFileName: utf8Decoder,
+        });
+      } catch {
+        // Second attempt: Default without filename decoding
         try {
-          // Second attempt: Lenient options for different ZIP formats
           zip = await JSZip.loadAsync(zipData, {
             checkCRC32: false,
-            createFolders: true
+            createFolders: true,
           });
-        } catch (secondError) {
+        } catch {
           // Third attempt: Most lenient options
           zip = await JSZip.loadAsync(zipData, {
             checkCRC32: false,
@@ -256,17 +271,27 @@ export default function LayerExtractorMain() {
       // Load ZIP file with fallback options for cross-platform compatibility
       let zip;
       try {
-        // First attempt: Default JSZip (works for most cases)
-        zip = await JSZip.loadAsync(zipData);
-      } catch (error) {
-
+        // First attempt: UTF-8 filename support for Windows
+        const utf8Decoder = (bytes: string[] | Buffer | Uint8Array) => {
+          if (bytes instanceof Uint8Array) {
+            return new TextDecoder('utf-8', { fatal: true }).decode(bytes);
+          }
+          // Fallback for other types
+          return String(bytes);
+        };
+        zip = await JSZip.loadAsync(zipData, {
+          checkCRC32: false,
+          createFolders: true,
+          decodeFileName: utf8Decoder,
+        });
+      } catch {
+        // Second attempt: Default without filename decoding
         try {
-          // Second attempt: Lenient options for different ZIP formats
           zip = await JSZip.loadAsync(zipData, {
             checkCRC32: false,
-            createFolders: true
+            createFolders: true,
           });
-        } catch (secondError) {
+        } catch {
           // Third attempt: Most lenient options
           zip = await JSZip.loadAsync(zipData, {
             checkCRC32: false,
