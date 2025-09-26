@@ -165,7 +165,7 @@ export default function LayerExtractorMain() {
       return;
     }
 
-    // Set config to delete 모자이크 layer
+    // Set config to delete mosaic layer
     const layersToDelete = allLayers.includes('모자이크') ? ['모자이크'] : [];
 
     console.log('Processing with mosaic deletion config:', { layersToDelete });
@@ -235,7 +235,7 @@ export default function LayerExtractorMain() {
 
           // No layer extraction in this simplified version - just combine layers
 
-          // Simple approach: combine all layers except 모자이크
+          // Simple approach: combine all layers except mosaic
           const canvas = document.createElement('canvas');
           const ctx = canvas.getContext('2d');
           if (!ctx) continue;
@@ -252,7 +252,7 @@ export default function LayerExtractorMain() {
             for (const layer of layers) {
               const layerName = layer.name || '';
 
-              // Skip mosaic layer (모자이크)
+              // Skip mosaic layer
               if (layerName === '모자이크') {
                 console.log(`Skipping mosaic layer: ${layerName}`);
                 continue;
@@ -490,7 +490,7 @@ export default function LayerExtractorMain() {
             <div className="flex gap-3">
               <button
                 onClick={async () => {
-                  // Directly call processFiles with 모자이크 deletion
+                  // Directly call processFiles with mosaic deletion
                   await processFilesWithMosaicDeletion();
                 }}
                 disabled={!selectedFile || isProcessing || isAnalyzing}
@@ -604,7 +604,7 @@ export default function LayerExtractorMain() {
         </ul>
         <div className="mt-4 text-xs text-blue-700 dark:text-blue-300">
           <p><strong>Supported formats:</strong> PSD, PSB</p>
-          <p><strong>What it does:</strong> Automatically detects and removes mosaic layers (named &quot;모자이크&quot;) from your PSD files, then combines all remaining layers into PNG images with modified mosaic.</p>
+          <p><strong>What it does:</strong> Automatically detects and removes mosaic layers (named &quot;mosaic&quot; in Korean) from your PSD files, then combines all remaining layers into PNG images with modified mosaic.</p>
         </div>
       </div>
     </div>
