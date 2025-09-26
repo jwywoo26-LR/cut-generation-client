@@ -77,8 +77,28 @@ export default function LayerExtractorMain() {
         throw new Error(`Invalid ZIP file signature (${zipSignature}). Please ensure the file is a valid ZIP archive.`);
       }
 
-      // Load ZIP file
-      const zip = await JSZip.loadAsync(zipData);
+      // Load ZIP file with fallback options for cross-platform compatibility
+      let zip;
+      try {
+        // First attempt: Default JSZip (works for most cases)
+        zip = await JSZip.loadAsync(zipData);
+      } catch (error) {
+
+        try {
+          // Second attempt: Lenient options for different ZIP formats
+          zip = await JSZip.loadAsync(zipData, {
+            checkCRC32: false,
+            createFolders: true
+          });
+        } catch (secondError) {
+          // Third attempt: Most lenient options
+          zip = await JSZip.loadAsync(zipData, {
+            checkCRC32: false,
+            createFolders: true,
+            optimizedBinaryString: false
+          });
+        }
+      }
 
       // Log all files in ZIP for debugging
       const allFiles = Object.keys(zip.files);
@@ -233,8 +253,28 @@ export default function LayerExtractorMain() {
         throw new Error('Invalid ZIP file. Please ensure the file is a valid ZIP archive and not corrupted.');
       }
 
-      // Load ZIP file
-      const zip = await JSZip.loadAsync(zipData);
+      // Load ZIP file with fallback options for cross-platform compatibility
+      let zip;
+      try {
+        // First attempt: Default JSZip (works for most cases)
+        zip = await JSZip.loadAsync(zipData);
+      } catch (error) {
+
+        try {
+          // Second attempt: Lenient options for different ZIP formats
+          zip = await JSZip.loadAsync(zipData, {
+            checkCRC32: false,
+            createFolders: true
+          });
+        } catch (secondError) {
+          // Third attempt: Most lenient options
+          zip = await JSZip.loadAsync(zipData, {
+            checkCRC32: false,
+            createFolders: true,
+            optimizedBinaryString: false
+          });
+        }
+      }
 
       const psdFiles = Object.keys(zip.files).filter(
         name => !zip.files[name].dir &&
