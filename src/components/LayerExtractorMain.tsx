@@ -3,10 +3,6 @@
 import { useState, useRef } from 'react';
 import { readPsd } from 'ag-psd';
 
-interface ProcessingConfig {
-  layersToDelete: string[];
-  layersToExtract: string[];
-}
 
 interface ProcessingResult {
   success: boolean;
@@ -35,10 +31,6 @@ interface PsdFileInfo {
 
 export default function LayerExtractorMain() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [config, setConfig] = useState<ProcessingConfig>({
-    layersToDelete: [],
-    layersToExtract: []
-  });
   const [result, setResult] = useState<ProcessingResult | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -56,7 +48,6 @@ export default function LayerExtractorMain() {
       setError('');
       setPsdFiles([]);
       setAllLayers([]);
-      setConfig({ layersToDelete: [], layersToExtract: [] });
 
       // Automatically analyze the ZIP file
       analyzeZipFile(file);
@@ -180,12 +171,9 @@ export default function LayerExtractorMain() {
     }
 
     // Set config to delete 모자이크 layer
-    const mosaicConfig = {
-      layersToDelete: allLayers.includes('모자이크') ? ['모자이크'] : [],
-      layersToExtract: []
-    };
+    const layersToDelete = allLayers.includes('모자이크') ? ['모자이크'] : [];
 
-    console.log('Processing with mosaic deletion config:', mosaicConfig);
+    console.log('Processing with mosaic deletion config:', { layersToDelete });
 
     setIsProcessing(true);
     setError('');
@@ -251,26 +239,7 @@ export default function LayerExtractorMain() {
             layerNames: psd.children?.map(l => l.name) || []
           });
 
-          // Extract specified layers FIRST (before filtering)
-          // Note: PSD layers are ordered top-to-bottom, so reverse to get bottom layers first
-          if (psd.children) {
-            const layers = [...psd.children]; // Create copy to avoid mutating original
-
-            for (const layer of layers) {
-              const layerName = layer.name || 'Unnamed';
-
-              if (mosaicConfig.layersToExtract.includes(layerName)) {
-                if (layer.canvas) {
-                  extractedLayers.push({
-                    name: layerName,
-                    canvas: layer.canvas,
-                    fileName: `${psdFileName.replace(/\.(psd|psb)$/i, '')}_${layerName}.png`
-                  });
-                  console.log(`Extracted layer: ${layerName} (layer index: ${layers.indexOf(layer)})`);
-                }
-              }
-            }
-          }
+          // No layer extraction in this simplified version - just combine layers
 
           // Simple approach: combine all layers except 모자이크
           const canvas = document.createElement('canvas');
@@ -391,10 +360,6 @@ export default function LayerExtractorMain() {
     setProgress(0);
     setPsdFiles([]);
     setAllLayers([]);
-    setConfig({
-      layersToDelete: [],
-      layersToExtract: []
-    });
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -571,7 +536,7 @@ export default function LayerExtractorMain() {
             </div>
 
             <div className="text-xs text-gray-500 dark:text-gray-400">
-              Click "Remove 모자이크 & Download" to automatically process all PSD files and download a ZIP containing clean PNG versions.
+              Click &quot;Remove 모자이크 &amp; Download&quot; to automatically process all PSD files and download a ZIP containing clean PNG versions.
             </div>
           </div>
         </div>
@@ -651,7 +616,7 @@ export default function LayerExtractorMain() {
           <li>1. Create a ZIP file containing your PSD or PSB files</li>
           <li>2. Upload the ZIP file using the file selector above</li>
           <li>3. Configure which layers to delete, disable, or extract</li>
-          <li>4. Click "Process PSD Files" to start layer processing</li>
+          <li>4. Click &quot;Process PSD Files&quot; to start layer processing</li>
           <li>5. Download the processed results as a ZIP file</li>
         </ul>
         <div className="mt-4 text-xs text-blue-700 dark:text-blue-300">
