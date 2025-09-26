@@ -77,46 +77,8 @@ export default function LayerExtractorMain() {
         throw new Error('Invalid ZIP file signature. File may be corrupted or not a valid ZIP archive.');
       }
 
-      let zip;
-      try {
-        // First attempt with strict options
-        zip = await JSZip.loadAsync(zipData, {
-          checkCRC32: false,
-          createFolders: false,
-          optimizedBinaryString: false
-        });
-      } catch (firstError) {
-        console.warn('First ZIP load attempt failed:', firstError);
-
-        try {
-          // Second attempt with more lenient options
-          zip = await JSZip.loadAsync(zipData, {
-            checkCRC32: false,
-            createFolders: true,
-            optimizedBinaryString: true,
-            decodeFileName: function(bytes) {
-              // Try to handle encoding issues
-              return new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(bytes));
-            }
-          });
-          console.log('ZIP loaded successfully on second attempt');
-        } catch (secondError) {
-          console.warn('Second ZIP load attempt failed:', secondError);
-
-          // Third attempt - most lenient
-          try {
-            zip = await JSZip.loadAsync(zipData.slice(0), {
-              checkCRC32: false,
-              createFolders: true,
-              optimizedBinaryString: true,
-              base64: false
-            });
-            console.log('ZIP loaded successfully on third attempt');
-          } catch (thirdError) {
-            throw new Error(`ZIP file is corrupted or incompatible. Central directory error: ${firstError.message}`);
-          }
-        }
-      }
+      // Load ZIP file with basic options
+      const zip = await JSZip.loadAsync(zipData);
 
       // Log all files in ZIP for debugging
       const allFiles = Object.keys(zip.files);
@@ -135,7 +97,7 @@ export default function LayerExtractorMain() {
         if (name.toLowerCase().endsWith('.psd') || name.toLowerCase().endsWith('.psb')) {
           console.log(`PSD/PSB file: ${name}`, {
             isDir: file.dir,
-            size: file._data ? file._data.compressedSize : 'unknown',
+            size: 'unknown',
             valid: isValidFile
           });
         }
@@ -271,46 +233,8 @@ export default function LayerExtractorMain() {
         throw new Error('Invalid ZIP file. Please ensure the file is a valid ZIP archive and not corrupted.');
       }
 
-      let zip;
-      try {
-        // First attempt with strict options
-        zip = await JSZip.loadAsync(zipData, {
-          checkCRC32: false,
-          createFolders: false,
-          optimizedBinaryString: false
-        });
-      } catch (firstError) {
-        console.warn('First ZIP load attempt failed:', firstError);
-
-        try {
-          // Second attempt with more lenient options
-          zip = await JSZip.loadAsync(zipData, {
-            checkCRC32: false,
-            createFolders: true,
-            optimizedBinaryString: true,
-            decodeFileName: function(bytes) {
-              // Try to handle encoding issues
-              return new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(bytes));
-            }
-          });
-          console.log('ZIP loaded successfully on second attempt');
-        } catch (secondError) {
-          console.warn('Second ZIP load attempt failed:', secondError);
-
-          // Third attempt - most lenient
-          try {
-            zip = await JSZip.loadAsync(zipData.slice(0), {
-              checkCRC32: false,
-              createFolders: true,
-              optimizedBinaryString: true,
-              base64: false
-            });
-            console.log('ZIP loaded successfully on third attempt');
-          } catch (thirdError) {
-            throw new Error(`ZIP file is corrupted or incompatible. Central directory error: ${firstError.message}`);
-          }
-        }
-      }
+      // Load ZIP file with basic options
+      const zip = await JSZip.loadAsync(zipData);
 
       const psdFiles = Object.keys(zip.files).filter(
         name => !zip.files[name].dir &&
@@ -370,39 +294,13 @@ export default function LayerExtractorMain() {
             });
           }
 
-          // Helper function to render only the mosaic layer
-          const renderOnlyMosaicLayer = () => {
-            console.log('Creating mosaic mask...');
-            const maskCanvas = document.createElement('canvas');
-            const maskCtx = maskCanvas.getContext('2d');
-            if (!maskCtx) return null;
-
-            maskCanvas.width = psd.width || 800;
-            maskCanvas.height = psd.height || 600;
-
-            // Find and render only the mosaic layer
-            if (psd.children) {
-              for (const layer of psd.children) {
-                if (layer.name === '모자이크' && layer.canvas) {
-                  const x = layer.left || 0;
-                  const y = layer.top || 0;
-                  maskCtx.globalAlpha = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
-                  maskCtx.drawImage(layer.canvas, x, y);
-                  console.log(`✓ Rendered mosaic layer for mask at (${x}, ${y}) with opacity ${maskCtx.globalAlpha}`);
-                  break;
-                }
-              }
-            }
-
-            return maskCanvas;
-          };
 
           // Helper function to create fallback canvas when no composite is available
           const createFallbackCanvas = () => {
             console.log('Creating fallback canvas from individual layers');
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
-            if (!ctx) return null;
+            if (!ctx) return undefined;
 
             canvas.width = psd.width || 800;
             canvas.height = psd.height || 600;
