@@ -11,11 +11,6 @@ interface ProcessingResult {
   error?: string;
 }
 
-interface ExtractedLayer {
-  name: string;
-  canvas: HTMLCanvasElement;
-  fileName: string;
-}
 
 interface LayerInfo {
   name: string;
@@ -201,7 +196,6 @@ export default function LayerExtractorMain() {
       }
 
       const processedFiles: { name: string; canvas?: HTMLCanvasElement; error?: string }[] = [];
-      const extractedLayers: ExtractedLayer[] = [];
       let processedCount = 0;
 
       for (const psdFileName of psdFiles) {
@@ -249,7 +243,7 @@ export default function LayerExtractorMain() {
           canvas.width = psd.width || 800;
           canvas.height = psd.height || 600;
 
-          console.log(`Combining layers (excluding 모자이크)...`);
+          console.log(`Combining layers (excluding mosaic)...`);
 
           // Go through layers bottom to top (reverse order)
           if (psd.children) {
@@ -258,9 +252,9 @@ export default function LayerExtractorMain() {
             for (const layer of layers) {
               const layerName = layer.name || '';
 
-              // Skip 모자이크 layer
+              // Skip mosaic layer (모자이크)
               if (layerName === '모자이크') {
-                console.log(`Skipping 모자이크 layer`);
+                console.log(`Skipping mosaic layer: ${layerName}`);
                 continue;
               }
 
@@ -291,12 +285,12 @@ export default function LayerExtractorMain() {
       }
 
       // Create download ZIP
-      await createDownloadZip(processedFiles, extractedLayers);
+      await createDownloadZip(processedFiles);
 
       setResult({
         success: true,
         processedFiles: processedFiles.filter(f => f.canvas).length,
-        extractedLayers: extractedLayers.length
+        extractedLayers: 0
       });
       setProgress(100);
 
@@ -310,32 +304,21 @@ export default function LayerExtractorMain() {
 
 
   const createDownloadZip = async (
-    processedFiles: { name: string; canvas?: HTMLCanvasElement; error?: string }[],
-    extractedLayers: ExtractedLayer[]
+    processedFiles: { name: string; canvas?: HTMLCanvasElement; error?: string }[]
   ) => {
     const JSZip = (await import('jszip')).default;
     const zip = new JSZip();
 
-    // Add processed main files
+    // Add processed files (without mosaic layer)
     for (const file of processedFiles) {
       if (file.canvas) {
         const blob = await new Promise<Blob>((resolve) => {
           file.canvas!.toBlob((blob) => resolve(blob!), 'image/png');
         });
 
-        const fileName = file.name.replace(/\.(psd|psb)$/i, '_processed.png');
+        const fileName = file.name.replace(/\.(psd|psb)$/i, '_clean.png');
         zip.file(fileName, blob);
       }
-    }
-
-    // Add extracted layers
-    const layersFolder = zip.folder('extracted_layers');
-    for (const layer of extractedLayers) {
-      const blob = await new Promise<Blob>((resolve) => {
-        layer.canvas.toBlob((blob) => resolve(blob!), 'image/png');
-      });
-
-      layersFolder?.file(layer.fileName, blob);
     }
 
     // Generate and download ZIP
@@ -344,7 +327,7 @@ export default function LayerExtractorMain() {
 
     const link = document.createElement('a');
     link.href = url;
-    link.download = 'processed_psd_files.zip';
+    link.download = 'clean_images_modified_mosaic.zip';
     link.style.display = 'none';
     document.body.appendChild(link);
     link.click();
@@ -475,7 +458,7 @@ export default function LayerExtractorMain() {
               <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="text-lg">🗑️</span>
-                  <h3 className="font-medium text-gray-900 dark:text-white">모자이크 Layer</h3>
+                  <h3 className="font-medium text-gray-900 dark:text-white">Mosaic Layer</h3>
                 </div>
                 <div className="text-sm text-gray-600 dark:text-gray-300">
                   {allLayers.includes('모자이크') ? (
@@ -498,7 +481,7 @@ export default function LayerExtractorMain() {
                   {psdFiles.length} PSD file{psdFiles.length !== 1 ? 's' : ''} ready
                 </div>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Output as PNG files without 모자이크 layer
+                  Output as PNG files with modified mosaic
                 </p>
               </div>
             </div>
@@ -523,7 +506,7 @@ export default function LayerExtractorMain() {
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
                 )}
                 <span>🗑️</span>
-                {isProcessing ? 'Removing 모자이크...' : 'Remove 모자이크 & Download'}
+                {isProcessing ? 'Removing Mosaic...' : 'Remove Mosaic & Download'}
               </button>
 
               <button
@@ -536,7 +519,7 @@ export default function LayerExtractorMain() {
             </div>
 
             <div className="text-xs text-gray-500 dark:text-gray-400">
-              Click &quot;Remove 모자이크 &amp; Download&quot; to automatically process all PSD files and download a ZIP containing clean PNG versions.
+              Click &quot;Remove Mosaic &amp; Download&quot; to automatically process all PSD files and download a ZIP containing PNG versions with modified mosaic.
             </div>
           </div>
         </div>
@@ -610,23 +593,18 @@ export default function LayerExtractorMain() {
       {/* Instructions */}
       <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-6">
         <h3 className="text-lg font-semibold text-blue-900 dark:text-blue-100 mb-2">
-          How to Use PSD Layer Extractor
+          How to Use Mosaic Layer Remover
         </h3>
         <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1">
           <li>1. Create a ZIP file containing your PSD or PSB files</li>
           <li>2. Upload the ZIP file using the file selector above</li>
-          <li>3. Configure which layers to delete, disable, or extract</li>
-          <li>4. Click &quot;Process PSD Files&quot; to start layer processing</li>
-          <li>5. Download the processed results as a ZIP file</li>
+          <li>3. Wait for automatic analysis to detect mosaic layers</li>
+          <li>4. Click &quot;Remove Mosaic &amp; Download&quot; to process files</li>
+          <li>5. Download clean PNG files with modified mosaic layers</li>
         </ul>
         <div className="mt-4 text-xs text-blue-700 dark:text-blue-300">
           <p><strong>Supported formats:</strong> PSD, PSB</p>
-          <p><strong>Layer operations:</strong></p>
-          <ul className="ml-4 list-disc">
-            <li><strong>Delete:</strong> Completely removes layers from final output</li>
-            <li><strong>Disable:</strong> Hides layers but keeps them in file structure</li>
-            <li><strong>Extract:</strong> Saves specified layers as separate PNG files</li>
-          </ul>
+          <p><strong>What it does:</strong> Automatically detects and removes mosaic layers (named &quot;모자이크&quot;) from your PSD files, then combines all remaining layers into PNG images with modified mosaic.</p>
         </div>
       </div>
     </div>
