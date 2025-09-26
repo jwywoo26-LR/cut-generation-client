@@ -74,10 +74,10 @@ export default function LayerExtractorMain() {
       console.log('ZIP signature:', zipSignature);
 
       if (signature[0] !== 0x50 || signature[1] !== 0x4B) {
-        throw new Error('Invalid ZIP file signature. File may be corrupted or not a valid ZIP archive.');
+        throw new Error(`Invalid ZIP file signature (${zipSignature}). Please ensure the file is a valid ZIP archive.`);
       }
 
-      // Load ZIP file with basic options
+      // Load ZIP file
       const zip = await JSZip.loadAsync(zipData);
 
       // Log all files in ZIP for debugging
@@ -233,7 +233,7 @@ export default function LayerExtractorMain() {
         throw new Error('Invalid ZIP file. Please ensure the file is a valid ZIP archive and not corrupted.');
       }
 
-      // Load ZIP file with basic options
+      // Load ZIP file
       const zip = await JSZip.loadAsync(zipData);
 
       const psdFiles = Object.keys(zip.files).filter(
