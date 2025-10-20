@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "@zip.js/zip.js": "^2.8.8",
     "ag-psd": "^28.3.1",
     "jszip": "^3.10.1",
     "next": "15.5.3",
