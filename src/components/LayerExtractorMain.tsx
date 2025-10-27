@@ -132,7 +132,8 @@ export default function LayerExtractorMain() {
           const layers: LayerInfo[] = [];
 
           if (psd.children) {
-            for (const layer of psd.children) {
+            for (let idx = 0; idx < psd.children.length; idx++) {
+              const layer = psd.children[idx];
               const layerName = layer.name || 'Unnamed';
               layers.push({
                 name: layerName,
@@ -230,15 +231,11 @@ export default function LayerExtractorMain() {
           // Skip if directory
           if (entry.directory) continue;
 
-          console.log(`[${processedCount + 1}/${psdEntries.length}] Processing ${entry.filename}...`);
-
           // Extract PSD file using zip.js streaming
           const writer = new BlobWriter();
           type EntryWithGetData = typeof entry & { getData: (writer: typeof BlobWriter.prototype) => Promise<Blob> };
           const blob = await (entry as EntryWithGetData).getData(writer);
           const psdData = await blob.arrayBuffer();
-
-          console.log(`✓ Extracted ${entry.filename}, size: ${(psdData.byteLength / (1024 * 1024)).toFixed(2)} MB`);
 
           // Validate PSD signature
           const signature = new Uint8Array(psdData.slice(0, 4));
@@ -254,25 +251,9 @@ export default function LayerExtractorMain() {
             skipCompositeImageData: false
           });
 
-          console.log(`Processing ${entry.filename}:`, {
-            width: psd.width,
-            height: psd.height,
-            layerCount: psd.children?.length || 0,
-            layerNames: psd.children?.map(l => l.name) || [],
-            hasComposite: !!psd.canvas
-          });
-
-          console.log(`=== DETAILED LAYER ANALYSIS FOR ${entry.filename} ===`);
-          if (psd.children) {
-            psd.children.forEach((layer, index) => {
-              console.log(`Layer ${index}: "${layer.name}", hasCanvas: ${!!layer.canvas}, hidden: ${layer.hidden}, opacity: ${layer.opacity}`);
-            });
-          }
-
 
           // Helper function to create fallback canvas when no composite is available
           const createFallbackCanvas = () => {
-            console.log('Creating fallback canvas from individual layers');
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
             if (!ctx) return undefined;
@@ -284,16 +265,19 @@ export default function LayerExtractorMain() {
 
             // Simple layer combining for fallback
             if (psd.children) {
-              for (const layer of [...psd.children].reverse()) {
+              const reversedLayers = [...psd.children].reverse();
+
+              for (const layer of reversedLayers) {
                 if (layer.name !== '모자이크' && layer.canvas && !layer.hidden) {
                   try {
                     const x = layer.left || 0;
                     const y = layer.top || 0;
-                    ctx.globalAlpha = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
+                    const currentOpacity = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
+
+                    ctx.globalAlpha = currentOpacity;
                     ctx.drawImage(layer.canvas, x, y);
-                    console.log(`✓ Drew fallback layer: "${layer.name}" at (${x}, ${y})`);
                   } catch (e) {
-                    console.warn(`Failed to draw fallback layer "${layer.name}":`, e);
+                    console.error(`Failed to draw fallback layer "${layer.name}":`, e);
                   }
                 }
               }
@@ -318,17 +302,11 @@ export default function LayerExtractorMain() {
           // Use PSD composite if available, otherwise manually combine layers
           let finalCanvas;
 
-          console.log(`=== RENDERING DECISION FOR ${entry.filename} ===`);
-          console.log(`Has PSD composite: ${!!psd.canvas}`);
-          console.log(`Found mosaic layer: ${foundMosaic}`);
-
           if (!foundMosaic) {
             // No mosaic layer - use PSD composite directly
-            console.log('✓ DECISION: Using PSD composite image (no mosaic layer found)');
             finalCanvas = psd.canvas || createFallbackCanvas();
           } else if (psd.canvas) {
-            // Mosaic layer exists - use PSD composite and paint over mosaic areas
-            console.log('✓ DECISION: Using PSD composite and painting over mosaic areas');
+            // Mosaic layer exists - reconstruct layers manually, skipping mosaic
 
             const canvas = document.createElement('canvas');
             const ctx = canvas.getContext('2d');
@@ -340,31 +318,44 @@ export default function LayerExtractorMain() {
             canvas.width = psd.width || 800;
             canvas.height = psd.height || 600;
 
-            // Step 1: Draw the full PSD composite as base
-            console.log('Step 1: Drawing PSD composite as base');
-            ctx.drawImage(psd.canvas, 0, 0);
+            // Fill with white background
+            ctx.fillStyle = 'white';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-            // Step 2: Draw "레이어 1" over the mosaic areas to cover them with clean content
-            console.log('Step 2: Drawing clean layers over mosaic areas');
             if (psd.children) {
-              for (const layer of psd.children) {
-                if ((layer.name === '레이어 1' || layer.name?.startsWith('레이어')) && layer.canvas) {
+              // Recursive function to draw layers (handles nested groups)
+              const drawLayerRecursive = (layer: any) => {
+                const isMosaic = layer.name === '모자이크';
+                const hasChildren = layer.children && layer.children.length > 0;
+
+                // If this is a group with children, draw children recursively first (bottom to top)
+                if (hasChildren) {
+                  for (let i = 0; i < layer.children.length; i++) {
+                    drawLayerRecursive(layer.children[i]);
+                  }
+                }
+
+                // Then draw this layer itself (if it has canvas and is not mosaic)
+                if (!isMosaic && layer.canvas && !layer.hidden) {
                   const x = layer.left || 0;
                   const y = layer.top || 0;
+                  const currentOpacity = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
 
                   ctx.globalCompositeOperation = 'source-over';
-                  ctx.globalAlpha = (layer.opacity !== undefined && layer.opacity <= 1) ? layer.opacity : (layer.opacity || 255) / 255;
+                  ctx.globalAlpha = currentOpacity;
                   ctx.drawImage(layer.canvas, x, y);
-
-                  console.log(`✓ Drew clean layer "${layer.name}" at (${x}, ${y}) to cover mosaic areas`);
                 }
+              };
+
+              // Process all top-level layers
+              for (let idx = 0; idx < psd.children.length; idx++) {
+                drawLayerRecursive(psd.children[idx]);
               }
             }
 
             finalCanvas = canvas;
           } else {
             // Fallback: manual layer combining (if no composite available)
-            console.log('✓ DECISION: Fallback to manual layer combining (no composite available)');
             finalCanvas = createFallbackCanvas();
           }
 
