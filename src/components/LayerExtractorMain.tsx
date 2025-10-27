@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
-import { readPsd } from 'ag-psd';
+import { readPsd, Layer } from 'ag-psd';
 
 
 interface ProcessingResult {
@@ -324,12 +324,12 @@ export default function LayerExtractorMain() {
 
             if (psd.children) {
               // Recursive function to draw layers (handles nested groups)
-              const drawLayerRecursive = (layer: any) => {
+              const drawLayerRecursive = (layer: Layer) => {
                 const isMosaic = layer.name === '모자이크';
                 const hasChildren = layer.children && layer.children.length > 0;
 
                 // If this is a group with children, draw children recursively first (bottom to top)
-                if (hasChildren) {
+                if (hasChildren && layer.children) {
                   for (let i = 0; i < layer.children.length; i++) {
                     drawLayerRecursive(layer.children[i]);
                   }
