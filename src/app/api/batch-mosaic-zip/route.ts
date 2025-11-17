@@ -25,7 +25,6 @@ interface CSVRow {
 interface MosaicStatusResponse {
   progress?: number;
   result_s3_url?: string;
-  save_s3_url?: string;
   mask_ratio?: number;
   error_info?: string;
 }
@@ -258,7 +257,6 @@ export async function POST(request: Request) {
 
         // Download processed image from presigned URL
         const presignedUrl = statusData.result_s3_url;
-        const afterS3Url = statusData.save_s3_url;
         const maskRatio = statusData.mask_ratio || 0;
 
         if (presignedUrl) {
@@ -298,7 +296,7 @@ export async function POST(request: Request) {
           index: i + 1,
           filename,
           before_s3_url: beforeS3Url,
-          after_s3_url: presignedUrl || afterS3Url,
+          after_s3_url: presignedUrl || '',
           mask_ratio: maskRatio,
           status: 'completed',
           task_id: taskId,
