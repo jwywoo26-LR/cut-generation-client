@@ -22,6 +22,14 @@ interface CSVRow {
   created_at: string;
 }
 
+interface MosaicStatusResponse {
+  progress?: number;
+  result_s3_url?: string;
+  save_s3_url?: string;
+  mask_ratio?: number;
+  error_info?: string;
+}
+
 class S3Uploader {
   private s3Client: S3Client;
   private bucketName: string;
@@ -212,7 +220,7 @@ export async function POST(request: Request) {
         // Poll for completion
         let attempts = 0;
         let completed = false;
-        let statusData: { progress?: number; result_s3_url?: string; save_s3_url?: string; mask_ratio?: number; error_info?: string } | null = null;
+        let statusData: MosaicStatusResponse | null = null;
 
         while (attempts < MAX_ATTEMPTS && !completed) {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
