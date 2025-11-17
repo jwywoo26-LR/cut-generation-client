@@ -93,6 +93,7 @@ export default function DashboardV2Page() {
     } else {
       setRecords([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTable]);
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -117,7 +118,7 @@ export default function DashboardV2Page() {
         const data = await response.json();
         setAuthError(data.error || 'Invalid password');
       }
-    } catch (error) {
+    } catch {
       setAuthError('Authentication failed. Please try again.');
     } finally {
       setIsAuthLoading(false);
@@ -296,7 +297,7 @@ export default function DashboardV2Page() {
       } else {
         setCreateTableError(data.error || 'Failed to create table');
       }
-    } catch (error) {
+    } catch {
       setCreateTableError('Failed to create table. Please try again.');
     } finally {
       setIsCreatingTable(false);

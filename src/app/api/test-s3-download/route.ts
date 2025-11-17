@@ -78,7 +78,7 @@ async function testS3SdkAccess(s3Uri: string): Promise<{ success: boolean; error
     // Convert stream to buffer to get size
     const chunks: Uint8Array[] = [];
     if (getResponse.Body) {
-      // @ts-ignore - Body is a readable stream
+      // @ts-expect-error - AWS SDK Body type is not properly typed for iteration
       for await (const chunk of getResponse.Body) {
         chunks.push(chunk);
       }
@@ -90,10 +90,11 @@ async function testS3SdkAccess(s3Uri: string): Promise<{ success: boolean; error
       size: buffer.length,
       contentType: headResponse.ContentType
     };
-  } catch (error: any) {
+  } catch (error) {
+    const err = error as Error & { name?: string };
     return {
       success: false,
-      error: `${error.name}: ${error.message}`
+      error: `${err.name || 'Error'}: ${err.message}`
     };
   }
 }

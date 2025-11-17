@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 
 interface Model {
@@ -22,6 +22,40 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [expandedModel, setExpandedModel] = useState<Model | null>(null);
+
+  const handleModelSelect = useCallback(async (modelId: string) => {
+    onModelSelect(modelId);
+
+    // If we have a current table, sync the selected_characters field
+    if (currentTable && modelId) {
+      setIsSyncing(true);
+      try {
+        const response = await fetch('/api/airtable/update-selected-characters', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            tableName: currentTable,
+            modelId: modelId,
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          console.log(`Updated selected_characters for ${result.successCount} records`);
+          // Trigger refresh of the AirtableRecords component
+          onTableSync?.();
+        } else {
+          console.error('Failed to update selected_characters');
+        }
+      } catch (error) {
+        console.error('Error updating selected_characters:', error);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  }, [currentTable, onModelSelect, onTableSync]);
 
   useEffect(() => {
     fetchModels();
@@ -86,40 +120,6 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
       setModels([]);
     } finally {
       setIsLoading(false);
-    }
-  };
-
-  const handleModelSelect = async (modelId: string) => {
-    onModelSelect(modelId);
-    
-    // If we have a current table, sync the selected_characters field
-    if (currentTable && modelId) {
-      setIsSyncing(true);
-      try {
-        const response = await fetch('/api/airtable/update-selected-characters', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            tableName: currentTable,
-            modelId: modelId,
-          }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          console.log(`Updated selected_characters for ${result.successCount} records`);
-          // Trigger refresh of the AirtableRecords component
-          onTableSync?.();
-        } else {
-          console.error('Failed to update selected_characters');
-        }
-      } catch (error) {
-        console.error('Error updating selected_characters:', error);
-      } finally {
-        setIsSyncing(false);
-      }
     }
   };
 
