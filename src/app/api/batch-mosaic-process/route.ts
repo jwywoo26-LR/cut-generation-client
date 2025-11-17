@@ -456,14 +456,14 @@ export async function POST(request: Request) {
       }
 
       // Generate ZIP file
-      const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
+      const zipBuffer = await zip.generateAsync({ type: 'arraybuffer' });
 
       // Return ZIP file as downloadable response
       return new NextResponse(zipBuffer, {
         headers: {
           'Content-Type': 'application/zip',
           'Content-Disposition': `attachment; filename="mosaic_processed_${Date.now()}.zip"`,
-          'Content-Length': zipBuffer.length.toString(),
+          'Content-Length': zipBuffer.byteLength.toString(),
         },
       });
     }

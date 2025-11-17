@@ -345,14 +345,14 @@ export async function POST(request: Request) {
     outputZip.file('results.csv', csvContent);
 
     // Generate ZIP
-    const finalZipBuffer = await outputZip.generateAsync({ type: 'nodebuffer' });
+    const finalZipBuffer = await outputZip.generateAsync({ type: 'arraybuffer' });
 
     // Step 5: Return ZIP file
     return new NextResponse(finalZipBuffer, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="mosaic_results_${Date.now()}.zip"`,
-        'Content-Length': finalZipBuffer.length.toString(),
+        'Content-Length': finalZipBuffer.byteLength.toString(),
       },
     });
 
