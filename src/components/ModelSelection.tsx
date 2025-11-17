@@ -59,7 +59,7 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [models, expandedModel]);
+  }, [models, expandedModel, handleModelSelect]);
 
   const fetchModels = async () => {
     setIsLoading(true);

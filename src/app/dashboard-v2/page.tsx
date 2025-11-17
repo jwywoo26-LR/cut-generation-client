@@ -14,6 +14,13 @@ interface AirtableTable {
   }>;
 }
 
+interface AirtableAttachment {
+  url: string;
+  filename?: string;
+  size?: number;
+  type?: string;
+}
+
 interface AirtableRecord {
   id: string;
   fields: Record<string, unknown>;
@@ -951,7 +958,7 @@ export default function DashboardV2Page() {
                                     {record.fields.reference_image_attached && Array.isArray(record.fields.reference_image_attached) && record.fields.reference_image_attached.length > 0 ? (
                                       <>
                                         <img
-                                          src={(record.fields.reference_image_attached[0] as any)?.url}
+                                          src={(record.fields.reference_image_attached[0] as AirtableAttachment)?.url}
                                           alt="Reference"
                                           className="w-16 h-16 object-cover rounded border border-gray-300 dark:border-gray-600"
                                         />
@@ -1050,12 +1057,12 @@ export default function DashboardV2Page() {
                                     if (image1 && Array.isArray(image1) && image1.length > 0) {
                                       return (
                                         <a
-                                          href={(image1[0] as any)?.url}
+                                          href={(image1[0] as AirtableAttachment)?.url}
                                           target="_blank"
                                           rel="noopener noreferrer"
                                         >
                                           <img
-                                            src={(image1[0] as any)?.url}
+                                            src={(image1[0] as AirtableAttachment)?.url}
                                             alt="Generated"
                                             className="w-16 h-16 object-cover rounded border border-gray-300 dark:border-gray-600 hover:opacity-80 transition-opacity"
                                           />
@@ -1170,7 +1177,7 @@ export default function DashboardV2Page() {
                       {selectedRecord.fields.reference_image_attached && Array.isArray(selectedRecord.fields.reference_image_attached) && selectedRecord.fields.reference_image_attached.length > 0 ? (
                         <div>
                           <img
-                            src={(selectedRecord.fields.reference_image_attached[0] as any)?.url}
+                            src={(selectedRecord.fields.reference_image_attached[0] as AirtableAttachment)?.url}
                             alt="Reference"
                             className="w-full rounded-lg border border-gray-300 dark:border-gray-600"
                           />
@@ -1198,7 +1205,7 @@ export default function DashboardV2Page() {
                               <div key={num} className="space-y-1">
                                 <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Image #{num}</p>
                                 <img
-                                  src={(imageField[0] as any)?.url}
+                                  src={(imageField[0] as AirtableAttachment)?.url}
                                   alt={`Generated ${num}`}
                                   className="w-full rounded-lg border border-gray-300 dark:border-gray-600"
                                 />

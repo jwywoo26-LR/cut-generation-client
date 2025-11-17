@@ -46,7 +46,7 @@ export interface CreateImageEditTaskParams {
   cfg?: number;
   megapixels?: number;
   region?: string;
-  callback_response_metadata?: Record<string, any>;
+  callback_response_metadata?: Record<string, unknown>;
   client_callback_url?: string;
 }
 
@@ -229,7 +229,7 @@ export class ImageAPIClient {
       client_callback_url,
     } = params;
 
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       image_origin_s3_url,
       edit_type,
     };
