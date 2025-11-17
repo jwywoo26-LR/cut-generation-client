@@ -102,8 +102,9 @@ async function downloadImageFromS3(s3Uri: string): Promise<Buffer> {
 
     const chunks: Uint8Array[] = [];
     if (response.Body) {
-      // @ts-expect-error - AWS SDK Body type doesn't properly expose async iterator
-      for await (const chunk of response.Body) {
+      // Type assertion needed because AWS SDK Body type doesn't properly expose async iterator in types
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      for await (const chunk of response.Body as any) {
         chunks.push(chunk);
       }
     }
