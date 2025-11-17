@@ -51,11 +51,11 @@ export async function POST(request: Request) {
       record: record,
       message: 'Record updated successfully',
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
         error: 'Failed to update record',
-        details: error instanceof Error ? error.message : 'Unknown error',
+        details: 'Unknown error',
       },
       { status: 500 }
     );

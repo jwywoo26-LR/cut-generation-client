@@ -292,7 +292,7 @@ export async function POST(request: Request) {
           created_at: new Date().toISOString(),
         });
 
-      } catch (error) {
+      } catch {
         csvData.push({
           index: i + 1,
           filename,
@@ -348,7 +348,7 @@ export async function POST(request: Request) {
     const finalZipBuffer = await outputZip.generateAsync({ type: 'nodebuffer' });
 
     // Step 5: Return ZIP file
-    return new NextResponse(finalZipBuffer as any, {
+    return new NextResponse(finalZipBuffer, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': `attachment; filename="mosaic_results_${Date.now()}.zip"`,
