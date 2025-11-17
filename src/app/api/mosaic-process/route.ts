@@ -161,19 +161,20 @@ async function downloadImageFromS3(s3Uri: string): Promise<Buffer> {
 }
 
 // Helper function to download image with fallback methods
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function downloadImageWithFallback(s3Uri: string): Promise<Buffer> {
   // Method 1: Try HTTP URL (for public buckets)
   try {
     const httpUrl = convertS3UriToHttpUrl(s3Uri);
     return await downloadImageFromUrl(httpUrl);
-  } catch (httpError) {
+  } catch {
     // Continue to next method
   }
 
   // Method 2: Try S3 SDK (for private buckets with credentials)
   try {
     return await downloadImageFromS3(s3Uri);
-  } catch (s3Error) {
+  } catch {
     throw new Error(`Failed to download image from ${s3Uri}. Both HTTP and S3 SDK methods failed.`);
   }
 }

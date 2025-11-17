@@ -227,6 +227,11 @@ export async function POST(request: Request) {
           );
 
           statusData = await statusResponse.json();
+
+          if (!statusData) {
+            throw new Error('Invalid status response');
+          }
+
           const progress = statusData.progress || 0;
 
           if (progress === 100) {
@@ -239,7 +244,7 @@ export async function POST(request: Request) {
           attempts++;
         }
 
-        if (!completed) {
+        if (!completed || !statusData) {
           throw new Error('Task timeout');
         }
 
@@ -270,7 +275,7 @@ export async function POST(request: Request) {
             try {
               const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
               await saveMetadataToAirtable(taskId, beforeHttpUrl, presignedUrl);
-            } catch (airtableError) {
+            } catch {
               // Airtable save failed silently
             }
           } else {

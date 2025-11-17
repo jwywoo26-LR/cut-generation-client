@@ -211,7 +211,7 @@ async function fetchImageAsBase64(imageUrl: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { tableName, recordIds, generationType, modelId, imageCount = 3, promptType = 'initial' } = await request.json();
+    const { tableName, recordIds, generationType, modelId, imageCount = 3 } = await request.json();
 
     if (!tableName || !generationType) {
       return NextResponse.json(

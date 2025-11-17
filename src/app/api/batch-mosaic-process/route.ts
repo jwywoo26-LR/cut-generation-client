@@ -141,7 +141,7 @@ async function downloadImageWithFallback(s3Uri: string): Promise<Buffer> {
       const buffer = Buffer.from(arrayBuffer);
       return buffer;
     }
-  } catch (httpError) {
+  } catch {
     // Continue to S3 SDK fallback
   }
 
@@ -193,6 +193,7 @@ async function saveMetadataToAirtable(
 
 // Helper to upload image to Airtable and get public CDN URL
 // This downloads the image from S3 and re-uploads to Airtable
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 async function uploadToAirtable(
   s3Uri: string,
   taskId: string,
@@ -337,13 +338,13 @@ async function processSingleImage(
             const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
             const afterHttpUrl = convertS3UriToHttpUrl(afterS3Url);
             await saveMetadataToAirtable(taskId, beforeHttpUrl, afterHttpUrl);
-          } catch (error) {
+          } catch {
             // Fallback: just save the presigned URL
             afterS3Url = presignedUrl;
             try {
               const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
               await saveMetadataToAirtable(taskId, beforeHttpUrl, afterS3Url);
-            } catch (airtableError) {
+            } catch {
               // Airtable save failed silently
             }
           }
@@ -353,7 +354,7 @@ async function processSingleImage(
           try {
             const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
             await saveMetadataToAirtable(taskId, beforeHttpUrl, afterS3Url);
-          } catch (airtableError) {
+          } catch {
             // Airtable save failed silently
           }
         }
@@ -442,7 +443,7 @@ export async function POST(request: Request) {
               zip.file(processedFilename, buffer);
               downloadedImages.push({ filename: processedFilename, buffer });
             }
-          } catch (error) {
+          } catch {
             // Failed to download, skip this image
           }
         }
