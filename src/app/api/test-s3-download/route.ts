@@ -78,6 +78,7 @@ async function testS3SdkAccess(s3Uri: string): Promise<{ success: boolean; error
     // Convert stream to buffer to get size
     const chunks: Uint8Array[] = [];
     if (getResponse.Body) {
+      // @ts-expect-error - AWS SDK Body type doesn't properly expose async iterator
       for await (const chunk of getResponse.Body) {
         chunks.push(chunk);
       }
