@@ -10,15 +10,6 @@ import { ImageAPIClient } from '@/lib/imageApiClient';
 
 const DEFAULT_MODEL = 'segnext_l_model_A_363_pair_1110_iter_80000';
 
-interface BatchProcessRequest {
-  images: {
-    index: number;
-    imageData: string; // base64 image data
-    filename: string;
-  }[];
-  modelName?: string;
-}
-
 interface ProcessedResult {
   index: number;
   filename: string;
@@ -111,7 +102,7 @@ async function downloadImageFromS3(s3Uri: string): Promise<Buffer> {
 
     const chunks: Uint8Array[] = [];
     if (response.Body) {
-      // @ts-ignore
+      // @ts-expect-error - AWS SDK Body type is not properly typed for iteration
       for await (const chunk of response.Body) {
         chunks.push(chunk);
       }
@@ -468,7 +459,7 @@ export async function POST(request: Request) {
       const zipBuffer = await zip.generateAsync({ type: 'nodebuffer' });
 
       // Return ZIP file as downloadable response
-      return new NextResponse(zipBuffer as any, {
+      return new NextResponse(zipBuffer, {
         headers: {
           'Content-Type': 'application/zip',
           'Content-Disposition': `attachment; filename="mosaic_processed_${Date.now()}.zip"`,
