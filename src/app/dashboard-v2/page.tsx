@@ -61,6 +61,9 @@ export default function DashboardV2Page() {
   const [editedFields, setEditedFields] = useState<Record<string, string>>({});
   const [isSavingRecord, setIsSavingRecord] = useState(false);
 
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'manage' | 'generate'>('manage');
+
   // Check if user is already authenticated
   useEffect(() => {
     const authStatus = sessionStorage.getItem('dashboardV2Auth');
@@ -454,8 +457,14 @@ export default function DashboardV2Page() {
       });
 
       if (response.ok) {
-        await loadRecords();
-        handleCloseModal();
+        const data = await response.json();
+        // Update the selected record with the new data
+        setSelectedRecord(data.record);
+        // Update the records list in the background (silently)
+        // This updates the table but doesn't affect the modal
+        setRecords(prevRecords =>
+          prevRecords.map(r => r.id === data.record.id ? data.record : r)
+        );
       }
     } catch (error) {
       console.error('Failed to save record:', error);
@@ -702,6 +711,7 @@ export default function DashboardV2Page() {
             <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
               {selectedTable ? (
                 <div>
+                  {/* Header with Title and Refresh */}
                   <div className="flex justify-between items-center mb-4">
                     <div>
                       <h2 className="text-xl font-bold text-gray-900 dark:text-white">
@@ -711,25 +721,56 @@ export default function DashboardV2Page() {
                         {tables.find(t => t.id === selectedTable)?.name} - {records.length} records
                       </p>
                     </div>
-                    <div className="flex gap-2">
+                    <button
+                      onClick={loadRecords}
+                      disabled={isLoadingRecords}
+                      className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
+                    >
+                      {isLoadingRecords ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </div>
+
+                  {/* Tabs */}
+                  <div className="mb-6 border-b border-gray-200 dark:border-gray-700">
+                    <div className="flex gap-4">
                       <button
-                        onClick={handleAddNewRecord}
-                        disabled={isCreatingRecord}
-                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
+                        onClick={() => setActiveTab('manage')}
+                        className={`pb-3 px-2 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === 'manage'
+                            ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
                       >
-                        {isCreatingRecord ? 'Creating...' : 'Add New Record'}
+                        Manage Records
                       </button>
                       <button
-                        onClick={loadRecords}
-                        disabled={isLoadingRecords}
-                        className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
+                        onClick={() => setActiveTab('generate')}
+                        className={`pb-3 px-2 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === 'generate'
+                            ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
                       >
-                        {isLoadingRecords ? 'Refreshing...' : 'Refresh'}
+                        Generate Content
                       </button>
                     </div>
                   </div>
 
-                  {/* Upload Reference Images Section */}
+                  {/* Tab Content: Manage Records */}
+                  {activeTab === 'manage' && (
+                    <>
+                      {/* Add New Record Button */}
+                      <div className="mb-6">
+                        <button
+                          onClick={handleAddNewRecord}
+                          disabled={isCreatingRecord}
+                          className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium disabled:opacity-50"
+                        >
+                          {isCreatingRecord ? 'Creating...' : 'Add New Record'}
+                        </button>
+                      </div>
+
+                      {/* Upload Reference Images Section */}
                   <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                     <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
                       Upload Reference Images
@@ -809,6 +850,37 @@ export default function DashboardV2Page() {
                       )}
                     </div>
                   </div>
+                    </>
+                  )}
+
+                  {/* Tab Content: Generate Content */}
+                  {activeTab === 'generate' && (
+                    <div className="space-y-4">
+                      <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                          Prompt Generation
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Generate prompts for selected records
+                        </p>
+                        <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm font-medium">
+                          Generate Prompts
+                        </button>
+                      </div>
+
+                      <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                          Image Generation
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Generate images based on prompts
+                        </p>
+                        <button className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
+                          Generate Images
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Records Display */}
                   {isLoadingRecords ? (
@@ -1071,44 +1143,9 @@ export default function DashboardV2Page() {
               {/* Modal Header */}
               <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 border-b border-gray-200 dark:border-gray-600">
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <h3 className="text-lg font-medium text-gray-900 dark:text-white">
-                      Record Details
-                    </h3>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={handlePreviousRecord}
-                        disabled={records.findIndex(r => r.id === selectedRecord.id) === 0}
-                        className={`p-1 rounded ${
-                          records.findIndex(r => r.id === selectedRecord.id) === 0
-                            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
-                        }`}
-                        title="Previous record"
-                      >
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                        </svg>
-                      </button>
-                      <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
-                        {records.findIndex(r => r.id === selectedRecord.id) + 1} / {records.length}
-                      </span>
-                      <button
-                        onClick={handleNextRecord}
-                        disabled={records.findIndex(r => r.id === selectedRecord.id) === records.length - 1}
-                        className={`p-1 rounded ${
-                          records.findIndex(r => r.id === selectedRecord.id) === records.length - 1
-                            ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
-                            : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
-                        }`}
-                        title="Next record"
-                      >
-                        <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
+                  <h3 className="text-lg font-medium text-gray-900 dark:text-white">
+                    Record Details
+                  </h3>
                   <button
                     onClick={handleCloseModal}
                     className="text-gray-400 hover:text-gray-500 dark:hover:text-gray-300"
@@ -1256,24 +1293,62 @@ export default function DashboardV2Page() {
 
               {/* Modal Footer */}
               <div className="bg-gray-50 dark:bg-gray-700 px-6 py-4 border-t border-gray-200 dark:border-gray-600">
-                <div className="flex gap-3 justify-end">
-                  <button
-                    onClick={handleCloseModal}
-                    className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md text-sm font-medium"
-                  >
-                    Close
-                  </button>
-                  <button
-                    onClick={handleSaveRecord}
-                    disabled={isSavingRecord}
-                    className={`px-4 py-2 rounded-md text-white text-sm font-medium ${
-                      isSavingRecord
-                        ? 'bg-gray-400 cursor-not-allowed'
-                        : 'bg-blue-600 hover:bg-blue-700'
-                    }`}
-                  >
-                    {isSavingRecord ? 'Saving...' : 'Save Changes'}
-                  </button>
+                <div className="flex items-center justify-between">
+                  {/* Navigation buttons */}
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={handlePreviousRecord}
+                      disabled={records.findIndex(r => r.id === selectedRecord.id) === 0}
+                      className={`p-2 rounded ${
+                        records.findIndex(r => r.id === selectedRecord.id) === 0
+                          ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                      title="Previous record"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                      </svg>
+                    </button>
+                    <span className="text-sm text-gray-500 dark:text-gray-400 px-2">
+                      {records.findIndex(r => r.id === selectedRecord.id) + 1} / {records.length}
+                    </span>
+                    <button
+                      onClick={handleNextRecord}
+                      disabled={records.findIndex(r => r.id === selectedRecord.id) === records.length - 1}
+                      className={`p-2 rounded ${
+                        records.findIndex(r => r.id === selectedRecord.id) === records.length - 1
+                          ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed'
+                          : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                      title="Next record"
+                    >
+                      <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Action buttons */}
+                  <div className="flex gap-3">
+                    <button
+                      onClick={handleCloseModal}
+                      className="px-4 py-2 bg-gray-600 hover:bg-gray-700 text-white rounded-md text-sm font-medium"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={handleSaveRecord}
+                      disabled={isSavingRecord}
+                      className={`px-4 py-2 rounded-md text-white text-sm font-medium ${
+                        isSavingRecord
+                          ? 'bg-gray-400 cursor-not-allowed'
+                          : 'bg-blue-600 hover:bg-blue-700'
+                      }`}
+                    >
+                      {isSavingRecord ? 'Saving...' : 'Save Changes'}
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

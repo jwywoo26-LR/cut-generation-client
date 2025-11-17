@@ -76,10 +76,10 @@ export async function POST(request: Request) {
     for (let i = 0; i < imageFiles.length; i++) {
       const { filename, buffer } = imageFiles[i];
       try {
-        // Generate a unique ID for this character reference using timestamp and random string
+        // Generate a unique ID for the row using timestamp and random string
         const timestamp = Date.now() + i; // Add index to ensure uniqueness even in rapid succession
         const randomString = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
-        const characterId = `char_${timestamp}_${randomString}`;
+        const rowId = `row_${timestamp}_${randomString}`;
 
         // Determine content type based on file extension
         const ext = filename.toLowerCase().split('.').pop();
@@ -98,8 +98,8 @@ export async function POST(request: Request) {
         console.log('S3 upload successful:', s3Url);
 
         const fields: Record<string, unknown> = {
-          id: '',
-          character_id: '',
+          id: rowId,  // Random row ID
+          character_id: '',  // Empty by default - user fills this in
           reference_image: filename,  // Store the filename as text
           reference_image_attached: [
             {
@@ -127,7 +127,7 @@ export async function POST(request: Request) {
         if (response.ok) {
           const record = await response.json();
           console.log('Created record:', record.id);
-          createdRecords.push(characterId);
+          createdRecords.push(rowId);
         } else {
           const errorText = await response.text();
           console.error('Failed to create record for', filename, ':', errorText);
