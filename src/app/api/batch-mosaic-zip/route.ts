@@ -212,7 +212,7 @@ export async function POST(request: Request) {
         // Poll for completion
         let attempts = 0;
         let completed = false;
-        let statusData: any = null;
+        let statusData: { progress?: number; result_s3_url?: string; mask_ratio?: number; error_info?: string } | null = null;
 
         while (attempts < MAX_ATTEMPTS && !completed) {
           await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL));
