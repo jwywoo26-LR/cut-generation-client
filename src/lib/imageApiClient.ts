@@ -364,7 +364,10 @@ export class ImageAPIClient {
 
       console.log(`⏳ Status: ${status} (elapsed: ${elapsedSec}s)`);
 
-      if (status === 100 || statusResponse.progress === 100) {
+      // Convert status to number for comparison
+      const statusNum = typeof status === 'string' ? parseInt(status, 10) : status;
+
+      if (statusNum === 100 || statusResponse.progress === 100) {
         // Completed
         const resultS3Url = statusResponse.save_s3_url || statusResponse.result_s3_url;
         if (resultS3Url) {
@@ -373,7 +376,7 @@ export class ImageAPIClient {
         } else {
           throw new Error('No result URL in completed response');
         }
-      } else if (typeof status === 'number' && status < 0) {
+      } else if (typeof statusNum === 'number' && statusNum < 0) {
         // Failed
         const errorInfo = statusResponse.error_info || 'Unknown error';
         throw new Error(`Image editing failed: ${errorInfo}`);
