@@ -184,7 +184,13 @@ export default function DashboardV2Page() {
 
       if (response.ok) {
         const data = await response.json();
-        setRecords(data.records || []);
+        // Sort records by reference_image field name
+        const sortedRecords = (data.records || []).sort((a: AirtableRecord, b: AirtableRecord) => {
+          const aName = (a.fields.reference_image as string) || '';
+          const bName = (b.fields.reference_image as string) || '';
+          return aName.localeCompare(bName);
+        });
+        setRecords(sortedRecords);
       }
     } catch (error) {
       console.error('Failed to load records:', error);
