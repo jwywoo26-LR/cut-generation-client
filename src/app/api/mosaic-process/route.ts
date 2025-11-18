@@ -185,7 +185,8 @@ async function uploadS3ImageToAirtable(
   urlOrS3Uri: string,
   tableName: string,
   taskId: string,
-  inputImageUrl?: string
+  inputImageUrl?: string,
+  account?: string
 ): Promise<string> {
   try {
     // If it's already an HTTP URL (presigned), use it directly
@@ -222,6 +223,11 @@ async function uploadS3ImageToAirtable(
     // Optionally add input image URL if provided (this is from public bucket so URL works)
     if (inputImageUrl) {
       fields['input_image'] = [{ url: inputImageUrl }];
+    }
+
+    // Add account information if provided
+    if (account) {
+      fields['account'] = account;
     }
 
     // Create a record with the image attachment
@@ -309,7 +315,7 @@ async function uploadImageToS3(imageBase64: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { imageData, modelName } = await request.json();
+    const { imageData, modelName, account } = await request.json();
 
     if (!imageData) {
       return NextResponse.json(
@@ -366,8 +372,8 @@ export async function POST(request: Request) {
           // Convert input S3 URI to HTTP URL for Airtable
           const inputHttpUrl = convertS3UriToHttpUrl(s3Url);
 
-          // Pass both the output URL and the input image HTTP URL
-          resultUrl = await uploadS3ImageToAirtable(urlToSave, airtableTableName, taskId, inputHttpUrl);
+          // Pass both the output URL and the input image HTTP URL, and account info
+          resultUrl = await uploadS3ImageToAirtable(urlToSave, airtableTableName, taskId, inputHttpUrl, account);
         }
 
         return NextResponse.json({

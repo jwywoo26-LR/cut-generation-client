@@ -2,35 +2,46 @@ import { NextRequest, NextResponse } from 'next/server';
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json();
+    const { email, password } = await request.json();
 
-    // Load password from environment variable
-    const MOSAIC_TESTER_PASSWORD = process.env.MOSAIC_TESTER_PASSWORD;
+    // Load accounts from environment variable
+    const MOSAIC_TESTER_ACCOUNTS = process.env.MOSAIC_TESTER_ACCOUNTS;
 
-    if (!MOSAIC_TESTER_PASSWORD) {
-      console.error('MOSAIC_TESTER_PASSWORD not set in environment variables');
+    if (!MOSAIC_TESTER_ACCOUNTS) {
+      console.error('MOSAIC_TESTER_ACCOUNTS not set in environment variables');
       return NextResponse.json(
         { error: 'Server configuration error' },
         { status: 500 }
       );
     }
 
-    if (!password) {
+    if (!email || !password) {
       return NextResponse.json(
-        { error: 'Password is required' },
+        { error: 'Email and password are required' },
         { status: 400 }
       );
     }
 
-    if (password !== MOSAIC_TESTER_PASSWORD) {
+    // Parse accounts from environment variable (format: email1:pass1,email2:pass2,...)
+    const accounts = MOSAIC_TESTER_ACCOUNTS.split(',').map(account => {
+      const [accountEmail, accountPassword] = account.split(':');
+      return { email: accountEmail.trim(), password: accountPassword.trim() };
+    });
+
+    // Find matching account
+    const matchedAccount = accounts.find(
+      acc => acc.email === email && acc.password === password
+    );
+
+    if (!matchedAccount) {
       return NextResponse.json(
-        { error: 'Invalid password' },
+        { error: 'Invalid email or password' },
         { status: 401 }
       );
     }
 
     return NextResponse.json(
-      { success: true, message: 'Authentication successful' },
+      { success: true, message: 'Authentication successful', email },
       { status: 200 }
     );
   } catch (error) {
