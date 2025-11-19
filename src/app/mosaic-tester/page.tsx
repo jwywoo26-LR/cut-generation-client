@@ -250,6 +250,11 @@ export default function MosaicTesterPage() {
         return;
       }
 
+      // Clean up old preview URL if exists
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+
       setSelectedFile(file);
       setError('');
       setProcessedImageUrl('');
@@ -263,17 +268,6 @@ export default function MosaicTesterPage() {
     }
   };
 
-  const handleReset = () => {
-    setSelectedFile(null);
-    setPreviewUrl('');
-    setProcessedImageUrl('');
-    setError('');
-
-    // Clean up object URL
-    if (previewUrl) {
-      URL.revokeObjectURL(previewUrl);
-    }
-  };
 
   // Multi Image Handlers
   const handleMultiFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -452,6 +446,38 @@ export default function MosaicTesterPage() {
     setModalImageTitle('');
   };
 
+  // Handle example image click
+  const handleExampleClick = async (imageUrl: string, imageName: string) => {
+    try {
+      // Fetch the image from the public folder
+      const response = await fetch(imageUrl);
+      const blob = await response.blob();
+
+      // Convert blob to File object
+      const file = new File([blob], imageName, { type: blob.type });
+
+      // Clean up old preview URL if exists
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
+
+      // Set the file and preview
+      setSelectedFile(file);
+      setError('');
+      setProcessedImageUrl('');
+
+      // Create preview URL
+      const url = URL.createObjectURL(file);
+      setPreviewUrl(url);
+
+      // Automatically trigger processing
+      await processImage(file);
+    } catch (err) {
+      setError('Failed to load example image');
+      console.error('Example load error:', err);
+    }
+  };
+
   // ZIP Upload Handlers
   // const handleZipFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
   //   const file = e.target.files?.[0];
@@ -597,7 +623,6 @@ export default function MosaicTesterPage() {
                 processedImageUrl={processedImageUrl}
                 error={error}
                 onFileSelect={handleFileSelect}
-                onReset={handleReset}
                 onOpenModal={openModal}
               />
             ) : null
@@ -633,7 +658,7 @@ export default function MosaicTesterPage() {
         </div>
 
         {/* Examples Section */}
-        <ExamplesSection />
+        <ExamplesSection onExampleClick={handleExampleClick} />
       </div>
 
       {/* Image Modal */}

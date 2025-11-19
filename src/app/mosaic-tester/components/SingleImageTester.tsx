@@ -9,7 +9,6 @@ interface SingleImageTesterProps {
   processedImageUrl: string;
   error: string;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
-  onReset: () => void;
   onOpenModal: (imageUrl: string, title: string) => void;
 }
 
@@ -20,7 +19,6 @@ export function SingleImageTester({
   processedImageUrl,
   error,
   onFileSelect,
-  onReset,
   onOpenModal
 }: SingleImageTesterProps) {
   // Drag and drop handlers
@@ -83,39 +81,24 @@ export function SingleImageTester({
 
   return (
     <div className="space-y-6">
-      {/* Control Buttons */}
-      <div className="flex items-center gap-3">
-        <input
-          id="single-file-upload"
-          type="file"
-          accept="image/*"
-          onChange={onFileSelect}
-          className="hidden"
-        />
+      {/* File input (hidden) */}
+      <input
+        id="single-file-upload"
+        type="file"
+        accept="image/*"
+        onChange={onFileSelect}
+        className="hidden"
+      />
 
-        <button
-          onClick={onReset}
-          disabled={!selectedFile}
-          className={`
-            px-6 py-3 rounded-lg font-medium transition-colors
-            ${!selectedFile
-              ? 'bg-gray-300 dark:bg-gray-600 text-gray-500 dark:text-gray-400 cursor-not-allowed'
-              : 'bg-gray-600 hover:bg-gray-700 text-white'
-            }
-          `}
-        >
-          Reset
-        </button>
-
-        {selectedFile && (
-          <div className="flex items-center gap-2 ml-auto">
-            <span className="text-sm text-gray-600 dark:text-gray-300">{selectedFile.name}</span>
-            <span className="text-xs text-gray-500 dark:text-gray-400">
-              ({(selectedFile.size / 1024).toFixed(2)} KB)
-            </span>
-          </div>
-        )}
-      </div>
+      {/* File info */}
+      {selectedFile && (
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-600 dark:text-gray-300">{selectedFile.name}</span>
+          <span className="text-xs text-gray-500 dark:text-gray-400">
+            ({(selectedFile.size / 1024).toFixed(2)} KB)
+          </span>
+        </div>
+      )}
 
       {isProcessing && (
         <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
@@ -141,26 +124,19 @@ export function SingleImageTester({
           <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
             Input
           </h3>
-          {previewUrl ? (
-            <>
-              <div className="border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800 h-72 flex items-center justify-center">
-                <img
-                  src={previewUrl}
-                  alt="Original"
-                  className="max-w-full max-h-full object-contain"
-                />
-              </div>
-              <div className="mt-3 text-sm text-gray-600 dark:text-gray-400">
-                {selectedFile?.name}
-              </div>
-            </>
-          ) : (
-            <label
-              htmlFor="single-file-upload"
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg h-72 flex items-center justify-center bg-white dark:bg-gray-800 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
-            >
+          <label
+            htmlFor="single-file-upload"
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            className="border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg h-72 flex items-center justify-center bg-white dark:bg-gray-800 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+          >
+            {previewUrl ? (
+              <img
+                src={previewUrl}
+                alt="Original"
+                className="max-w-full max-h-full object-contain"
+              />
+            ) : (
               <div className="text-center text-gray-500 dark:text-gray-400">
                 <svg className="w-12 h-12 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
@@ -168,8 +144,8 @@ export function SingleImageTester({
                 <p className="text-sm font-semibold mb-1">Click to upload or drag and drop</p>
                 <p className="text-xs">PNG, JPG, WebP</p>
               </div>
-            </label>
-          )}
+            )}
+          </label>
         </div>
 
         {/* Output Column */}

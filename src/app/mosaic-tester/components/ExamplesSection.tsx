@@ -9,7 +9,11 @@ interface ExampleItem {
   imageName: string;
 }
 
-export function ExamplesSection() {
+interface ExamplesSectionProps {
+  onExampleClick?: (imageUrl: string, imageName: string) => void;
+}
+
+export function ExamplesSection({ onExampleClick }: ExamplesSectionProps) {
   const examples: ExampleItem[] = [
     {
       title: 'Female',
@@ -44,7 +48,7 @@ export function ExamplesSection() {
           예제
         </h3>
         <p className="text-sm text-gray-600 dark:text-gray-400">
-          💡 &quot;이전&quot; 이미지를 드래그하여 테스트하세요!
+          💡 &quot;이전&quot; 이미지를 클릭하거나 드래그하여 테스트하세요!
         </p>
       </div>
 
@@ -57,7 +61,10 @@ export function ExamplesSection() {
             <div className="flex items-center gap-3">
               <div className="flex-1">
                 <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 font-medium">Before</p>
-                <div className="border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800 cursor-grab active:cursor-grabbing hover:border-blue-500 dark:hover:border-blue-400 transition-colors">
+                <div
+                  className="border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
+                  onClick={() => onExampleClick?.(example.beforeImage, example.imageName)}
+                >
                   <img
                     src={example.beforeImage}
                     alt={`${example.title} Before`}
