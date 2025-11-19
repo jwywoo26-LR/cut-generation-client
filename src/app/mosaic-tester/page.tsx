@@ -208,7 +208,6 @@ export default function MosaicTesterPage() {
         },
         body: JSON.stringify({
           imageData: imageData,
-          modelName: 'segnext_l_model_A_363_pair_1110_iter_80000',
           account: userAccount
         }),
       });

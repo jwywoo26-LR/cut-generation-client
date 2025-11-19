@@ -1,8 +1,6 @@
 import { NextResponse } from 'next/server';
 import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
-const MODEL_NAME = 'segnext_l_model_A_363_pair_1110_iter_80000';
-
 interface MosaicSegmentationResponse {
   task_id?: string;
   progress?: number;
@@ -32,12 +30,13 @@ class MosaicAPIClient {
     };
   }
 
-  async createMosaicSegmentationTask(imageS3Url: string, modelName: string = MODEL_NAME): Promise<MosaicSegmentationResponse> {
+  async createMosaicSegmentationTask(imageS3Url: string, modelName?: string): Promise<MosaicSegmentationResponse> {
+    const defaultModelName = process.env.MOSAIC_MODEL_NAME || 'segnext_l_model_A_363_pair_1110_iter_80000';
     const url = `${this.baseUrl}/api/v1/mosaic-segmentation`;
 
     const payload = {
       image_origin_s3_url: imageS3Url,
-      model_name: modelName
+      model_name: modelName || defaultModelName
     };
 
     try {
@@ -339,7 +338,7 @@ export async function POST(request: Request) {
     // Step 2: Create mosaic segmentation task with S3 URL
     const taskResult = await mosaicClient.createMosaicSegmentationTask(
       s3Url,
-      modelName || MODEL_NAME
+      modelName
     );
 
     const taskId = taskResult.task_id;
