@@ -18,6 +18,8 @@ export default function MosaicTesterPage() {
   const [authError, setAuthError] = useState('');
   const [isAuthLoading, setIsAuthLoading] = useState(false);
   const [userAccount, setUserAccount] = useState<string>('');
+  const [usageLimit, setUsageLimit] = useState<number>(0);
+  const [currentUsage, setCurrentUsage] = useState<number>(0);
 
   const [activeTab, setActiveTab] = useState<TabType>('single');
 
@@ -45,6 +47,20 @@ export default function MosaicTesterPage() {
   // const [zipError, setZipError] = useState<string>('');
   // const [zipProgress, setZipProgress] = useState<string>('');
 
+  // Fetch usage status
+  const fetchUsageStatus = async (account: string) => {
+    try {
+      const response = await fetch(`/api/account-status?account=${encodeURIComponent(account)}`);
+      if (response.ok) {
+        const data = await response.json();
+        setUsageLimit(data.data.limit);
+        setCurrentUsage(data.data.usage);
+      }
+    } catch (error) {
+      console.error('Failed to fetch usage status:', error);
+    }
+  };
+
   // Check if user is already authenticated
   useEffect(() => {
     const authStatus = sessionStorage.getItem('mosaicTesterAuth');
@@ -52,6 +68,7 @@ export default function MosaicTesterPage() {
     if (authStatus === 'true' && savedAccount) {
       setIsAuthenticated(true);
       setUserAccount(savedAccount);
+      fetchUsageStatus(savedAccount);
     }
   }, []);
 
@@ -77,6 +94,8 @@ export default function MosaicTesterPage() {
         sessionStorage.setItem('mosaicTesterAccount', data.email);
         setEmail('');
         setPassword('');
+        // Fetch usage status after login
+        fetchUsageStatus(data.email);
       } else {
         const data = await response.json();
         setAuthError(data.error || 'Invalid email or password');
@@ -190,6 +209,39 @@ export default function MosaicTesterPage() {
     setError('');
 
     try {
+      // Check account status and limit
+      const statusResponse = await fetch(`/api/account-status?account=${encodeURIComponent(userAccount)}`);
+
+      if (!statusResponse.ok) {
+        const statusError = await statusResponse.json();
+        throw new Error(statusError.error || '계정 상태 확인에 실패했습니다');
+      }
+
+      const statusData = await statusResponse.json();
+
+      if (!statusData.canProcess) {
+        throw new Error(`사용 한도에 도달했습니다! ${statusData.data.limit}회 중 ${statusData.data.usage}회를 사용하셨습니다.`);
+      }
+
+      // Increment usage
+      const incrementResponse = await fetch('/api/account-status', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ account: userAccount }),
+      });
+
+      if (!incrementResponse.ok) {
+        const incrementError = await incrementResponse.json();
+        throw new Error(incrementError.error || '사용량 업데이트에 실패했습니다');
+      }
+
+      const incrementData = await incrementResponse.json();
+      // Update local usage state
+      setCurrentUsage(incrementData.usage);
+      setUsageLimit(incrementData.limit);
+
       // Convert image to base64
       const reader = new FileReader();
       const imageDataPromise = new Promise<string>((resolve, reject) => {
@@ -214,7 +266,7 @@ export default function MosaicTesterPage() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to process image');
+        throw new Error(errorData.error || '이미지 처리에 실패했습니다');
       }
 
       const result = await response.json();
@@ -235,7 +287,7 @@ export default function MosaicTesterPage() {
       }
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Processing failed');
+      setError(err instanceof Error ? err.message : '처리 실패');
       console.error('Processing error:', err);
     } finally {
       setIsProcessing(false);
@@ -246,7 +298,7 @@ export default function MosaicTesterPage() {
     const file = e.target.files?.[0];
     if (file) {
       if (!file.type.startsWith('image/')) {
-        setError('Please select a valid image file');
+        setError('올바른 이미지 파일을 선택해주세요');
         return;
       }
 
@@ -473,7 +525,7 @@ export default function MosaicTesterPage() {
       // Automatically trigger processing
       await processImage(file);
     } catch (err) {
-      setError('Failed to load example image');
+      setError('예제 이미지 로드에 실패했습니다');
       console.error('Example load error:', err);
     }
   };
@@ -575,9 +627,14 @@ export default function MosaicTesterPage() {
               </h1>
             </div>
             <div className="flex items-center gap-4">
-              <span className="text-sm text-gray-600 dark:text-gray-400">
-                {userAccount}
-              </span>
+              <div className="flex flex-col items-end">
+                <span className="text-sm text-gray-600 dark:text-gray-400">
+                  {userAccount}
+                </span>
+                <span className={`text-xs font-medium ${currentUsage >= usageLimit ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-500'}`}>
+                  사용량: {currentUsage} / {usageLimit}
+                </span>
+              </div>
               <button
                 onClick={handleLogout}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"

@@ -1,11 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 interface ExampleItem {
   title: string;
-  beforeImage: string;
-  afterImage: string;
+  imagePath: string;
   imageName: string;
 }
 
@@ -14,87 +13,114 @@ interface ExamplesSectionProps {
 }
 
 export function ExamplesSection({ onExampleClick }: ExamplesSectionProps) {
+  const [isBlurred, setIsBlurred] = useState(true);
+
   const examples: ExampleItem[] = [
     {
-      title: 'Female',
-      beforeImage: '/data/mosaic_ex/before/female_before_ex.png',
-      afterImage: '/data/mosaic_ex/after/female_after_ex.png',
-      imageName: 'female_before_ex.png'
+      title: 'Both 01',
+      imagePath: '/data/mosaic_ex/inputs/before_both_01.png',
+      imageName: 'before_both_01.png'
     },
     {
-      title: 'Male',
-      beforeImage: '/data/mosaic_ex/before/male_before_ex.png',
-      afterImage: '/data/mosaic_ex/after/male_after_ex.png',
-      imageName: 'male_before_ex.png'
+      title: 'Female 01',
+      imagePath: '/data/mosaic_ex/inputs/before_female_01.png',
+      imageName: 'before_female_01.png'
     },
     {
-      title: 'Inserted',
-      beforeImage: '/data/mosaic_ex/before/inserted_before_ex.png',
-      afterImage: '/data/mosaic_ex/after/inserted_after_ex.png',
-      imageName: 'inserted_before_ex.png'
+      title: 'Female 02',
+      imagePath: '/data/mosaic_ex/inputs/before_female_02.png',
+      imageName: 'before_female_02.png'
     },
     {
-      title: 'Both',
-      beforeImage: '/data/mosaic_ex/before/both_before_ex.png',
-      afterImage: '/data/mosaic_ex/after/both_after_ex.png',
-      imageName: 'both_before_ex.png'
+      title: 'Inserted 01',
+      imagePath: '/data/mosaic_ex/inputs/before_inserted_01.png',
+      imageName: 'before_inserted_01.png'
+    },
+    {
+      title: 'Inserted 02',
+      imagePath: '/data/mosaic_ex/inputs/before_inserted_02.png',
+      imageName: 'before_inserted_02.png'
+    },
+    {
+      title: 'Inserted 03',
+      imagePath: '/data/mosaic_ex/inputs/before_inserted_03.png',
+      imageName: 'before_inserted_03.png'
+    },
+    {
+      title: 'Male 01',
+      imagePath: '/data/mosaic_ex/inputs/before_male_01.png',
+      imageName: 'before_male_01.png'
+    },
+    {
+      title: 'Male 02',
+      imagePath: '/data/mosaic_ex/inputs/before_male_02.png',
+      imageName: 'before_male_02.png'
     }
   ];
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-      <div className="mb-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
-          예제
-        </h3>
-        <p className="text-sm text-gray-600 dark:text-gray-400">
-          💡 &quot;이전&quot; 이미지를 클릭하거나 드래그하여 테스트하세요!
-        </p>
+      <div className="mb-6 flex items-start justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">
+            예제
+          </h3>
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            💡 이미지를 클릭하거나 드래그하여 테스트하세요!
+          </p>
+        </div>
+        <button
+          onClick={() => setIsBlurred(!isBlurred)}
+          className="ml-4 px-3 py-1.5 text-xs font-medium rounded-lg border-2 transition-colors flex-shrink-0"
+          style={{
+            borderColor: isBlurred ? '#9CA3AF' : '#3B82F6',
+            backgroundColor: isBlurred ? '#F3F4F6' : '#3B82F6',
+            color: isBlurred ? '#4B5563' : '#FFFFFF'
+          }}
+        >
+          {isBlurred ? '보기' : '숨기기'}
+        </button>
       </div>
 
-      <div className="grid grid-cols-2 gap-6">
-        {examples.map((example) => (
-          <div key={example.title} className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-gray-900 dark:text-white mb-3">
-              {example.title}
-            </h4>
-            <div className="flex items-center gap-3">
-              <div className="flex-1">
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 font-medium">Before</p>
-                <div
-                  className="border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors"
-                  onClick={() => onExampleClick?.(example.beforeImage, example.imageName)}
-                >
-                  <img
-                    src={example.beforeImage}
-                    alt={`${example.title} Before`}
-                    className="w-full h-auto object-contain"
-                    style={{ maxHeight: '200px' }}
-                    draggable="true"
-                    onDragStart={(e) => {
-                      e.dataTransfer.setData('imageUrl', example.beforeImage);
-                      e.dataTransfer.setData('imageName', example.imageName);
-                    }}
-                  />
-                </div>
+      {/* Horizontally scrollable container with blur overlay */}
+      <div className="relative">
+        <div className="overflow-x-auto">
+          <div className="flex gap-4 pb-4">
+            {examples.map((example) => (
+              <div
+                key={example.imageName}
+                className="flex-shrink-0 border-2 border-gray-300 dark:border-gray-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800 cursor-pointer hover:border-blue-500 dark:hover:border-blue-400 transition-colors flex items-center justify-center"
+                style={{ width: '200px', height: '250px' }}
+                onClick={() => onExampleClick?.(example.imagePath, example.imageName)}
+              >
+                <img
+                  src={example.imagePath}
+                  alt={example.title}
+                  className="max-w-full max-h-full object-contain"
+                  draggable="true"
+                  onDragStart={(e) => {
+                    e.dataTransfer.setData('imageUrl', example.imagePath);
+                    e.dataTransfer.setData('imageName', example.imageName);
+                  }}
+                />
               </div>
-              <div className="text-2xl text-gray-600 dark:text-gray-400 font-bold flex-shrink-0">
-                &gt;
-              </div>
-              <div className="flex-1">
-                <p className="text-xs text-gray-600 dark:text-gray-400 mb-2 font-medium">After</p>
-                <div className="border-2 border-green-500 dark:border-green-600 rounded-lg overflow-hidden bg-white dark:bg-gray-800">
-                  <img
-                    src={example.afterImage}
-                    alt={`${example.title} After`}
-                    className="w-full h-auto object-contain"
-                    style={{ maxHeight: '200px' }}
-                  />
-                </div>
-              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Blur overlay */}
+        {isBlurred && (
+          <div
+            className="absolute inset-0 backdrop-blur-xl bg-white/30 dark:bg-gray-800/30 rounded-lg flex items-center justify-center cursor-pointer"
+            onClick={() => setIsBlurred(false)}
+          >
+            <div className="text-center">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                클릭하여 예제 보기
+              </p>
             </div>
           </div>
-        ))}
+        )}
       </div>
     </div>
   );

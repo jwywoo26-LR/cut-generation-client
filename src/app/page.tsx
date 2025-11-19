@@ -7,7 +7,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    router.push('/main');
+    router.push('/mosaic-tester');
   }, [router]);
 
   return (
