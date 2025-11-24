@@ -4,10 +4,6 @@ import { useState, useEffect } from 'react';
 import { SingleImageTester } from './components/SingleImageTester';
 import { ExamplesSection } from './components/ExamplesSection';
 import { ImageModal } from './components/ImageModal';
-import { MultiImageTester } from './components/MultiImageTester';
-import { ZipBatchTester } from './components/ZipBatchTester';
-
-type TabType = 'single' | 'multi' | 'zip';
 
 export default function MosaicTesterPage() {
   // Authentication state
@@ -20,8 +16,6 @@ export default function MosaicTesterPage() {
   const [usageLimit, setUsageLimit] = useState<number>(0);
   const [currentUsage, setCurrentUsage] = useState<number>(0);
 
-  const [activeTab, setActiveTab] = useState<TabType>('single');
-
   // Single image state
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string>('');
@@ -29,22 +23,12 @@ export default function MosaicTesterPage() {
   const [processedImageUrl, setProcessedImageUrl] = useState<string>('');
   const [error, setError] = useState<string>('');
 
-  // Multi image state
-  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
-  const [previewUrls, setPreviewUrls] = useState<string[]>([]);
-  const [isProcessingMulti, setIsProcessingMulti] = useState(false);
-  const [processedImageUrls, setProcessedImageUrls] = useState<string[]>([]);
-  const [multiError, setMultiError] = useState<string>('');
+  // Mask type selection
+  const [maskType, setMaskType] = useState<string>('white_mask');
 
   // Modal state for viewing images
   const [modalImageUrl, setModalImageUrl] = useState<string>('');
   const [modalImageTitle, setModalImageTitle] = useState<string>('');
-
-  // ZIP upload state
-  // const [selectedZipFile, setSelectedZipFile] = useState<File | null>(null);
-  // const [isProcessingZip, setIsProcessingZip] = useState(false);
-  // const [zipError, setZipError] = useState<string>('');
-  // const [zipProgress, setZipProgress] = useState<string>('');
 
   // Fetch usage status
   const fetchUsageStatus = async (account: string) => {
@@ -259,7 +243,8 @@ export default function MosaicTesterPage() {
         },
         body: JSON.stringify({
           imageData: imageData,
-          account: userAccount
+          account: userAccount,
+          maskType: maskType
         }),
       });
 
@@ -319,173 +304,6 @@ export default function MosaicTesterPage() {
     }
   };
 
-
-  // Multi Image Handlers
-  const handleMultiFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-
-    if (files.length === 0) return;
-
-    // Validate all files are images
-    const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
-    if (invalidFiles.length > 0) {
-      setMultiError(`${invalidFiles.length} file(s) are not valid images`);
-      return;
-    }
-
-    setSelectedFiles(files);
-    setMultiError('');
-    setProcessedImageUrls([]);
-
-    // Create preview URLs
-    const urls = files.map(file => URL.createObjectURL(file));
-    setPreviewUrls(urls);
-  };
-
-  const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-
-    const files = Array.from(e.dataTransfer.files);
-
-    if (files.length === 0) return;
-
-    // Validate all files are images
-    const invalidFiles = files.filter(file => !file.type.startsWith('image/'));
-    if (invalidFiles.length > 0) {
-      setMultiError(`${invalidFiles.length} file(s) are not valid images`);
-      return;
-    }
-
-    setSelectedFiles(files);
-    setMultiError('');
-    setProcessedImageUrls([]);
-
-    // Create preview URLs
-    const urls = files.map(file => URL.createObjectURL(file));
-    setPreviewUrls(urls);
-  };
-
-  const handleProcessMulti = async () => {
-    if (selectedFiles.length === 0) {
-      setMultiError('Please select images first');
-      return;
-    }
-
-    setIsProcessingMulti(true);
-    setMultiError('');
-    setProcessedImageUrls([]); // Reset processed URLs
-
-    try {
-      // Process images one by one to show results progressively
-      const processedUrls: string[] = [];
-      let successCount = 0;
-      let failedCount = 0;
-
-      for (let index = 0; index < selectedFiles.length; index++) {
-        const file = selectedFiles[index];
-        console.log(`Processing image ${index + 1}/${selectedFiles.length}: ${file.name}`);
-
-        try {
-          // Convert file to base64
-          const reader = new FileReader();
-          const imageDataPromise = new Promise<string>((resolve, reject) => {
-            reader.onload = () => {
-              const result = reader.result as string;
-              resolve(result);
-            };
-            reader.onerror = reject;
-            reader.readAsDataURL(file);
-          });
-
-          const imageData = await imageDataPromise;
-
-          // Call single image processing API
-          const response = await fetch('/api/mosaic-process', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              imageData: imageData,
-              modelName: 'segnext_l_model_A_363_pair_1110_iter_80000'
-            }),
-          });
-
-          if (!response.ok) {
-            const errorData = await response.json();
-            throw new Error(errorData.error || 'Failed to process image');
-          }
-
-          const result = await response.json();
-
-          if (result.success && result.resultUrl) {
-            processedUrls.push(result.resultUrl);
-            successCount++;
-            console.log(`✅ Processed ${index + 1}/${selectedFiles.length}: ${file.name}`);
-          } else {
-            processedUrls.push(''); // Empty string for failed images
-            failedCount++;
-            console.error(`❌ Failed ${index + 1}/${selectedFiles.length}: ${file.name}`);
-          }
-
-          // Update UI with the current progress
-          setProcessedImageUrls([...processedUrls]);
-
-        } catch (err) {
-          processedUrls.push(''); // Empty string for failed images
-          failedCount++;
-          console.error(`❌ Error processing ${file.name}:`, err);
-
-          // Update UI even on error
-          setProcessedImageUrls([...processedUrls]);
-        }
-      }
-
-      console.log(`✅ Processing complete: ${successCount} succeeded, ${failedCount} failed`);
-      if (failedCount > 0) {
-        setMultiError(`Warning: ${failedCount} image(s) failed to process`);
-      }
-
-    } catch (err) {
-      setMultiError(err instanceof Error ? err.message : 'Processing failed');
-      console.error('Batch processing error:', err);
-    } finally {
-      setIsProcessingMulti(false);
-    }
-  };
-
-  const handleResetMulti = () => {
-    setSelectedFiles([]);
-    setPreviewUrls([]);
-    setProcessedImageUrls([]);
-    setMultiError('');
-
-    // Clean up object URLs
-    previewUrls.forEach(url => URL.revokeObjectURL(url));
-  };
-
-  const removeImage = (index: number) => {
-    const newFiles = selectedFiles.filter((_, i) => i !== index);
-    const newUrls = previewUrls.filter((_, i) => i !== index);
-
-    // Clean up the removed URL
-    URL.revokeObjectURL(previewUrls[index]);
-
-    setSelectedFiles(newFiles);
-    setPreviewUrls(newUrls);
-
-    // Remove corresponding processed image if exists
-    if (processedImageUrls.length > index) {
-      setProcessedImageUrls(processedImageUrls.filter((_, i) => i !== index));
-    }
-  };
-
   // Modal Handlers
   const openModal = (imageUrl: string, title: string) => {
     setModalImageUrl(imageUrl);
@@ -529,83 +347,6 @@ export default function MosaicTesterPage() {
     }
   };
 
-  // ZIP Upload Handlers
-  // const handleZipFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-  //   const file = e.target.files?.[0];
-  //   if (file) {
-  //     if (!file.name.endsWith('.zip')) {
-  //       setZipError('Please select a valid ZIP file');
-  //       return;
-  //     }
-
-  //     setSelectedZipFile(file);
-  //     setZipError('');
-  //     setZipProgress('');
-  //   }
-  // };
-
-  // const handleZipProcess = async () => {
-  //   if (!selectedZipFile) {
-  //     setZipError('Please select a ZIP file first');
-  //     return;
-  //   }
-
-  //   setIsProcessingZip(true);
-  //   setZipError('');
-  //   setZipProgress('Uploading ZIP file...');
-
-  //   try {
-  //     const formData = new FormData();
-  //     formData.append('zipFile', selectedZipFile);
-  //     formData.append('modelName', 'segnext_l_model_A_363_pair_1110_iter_80000');
-
-  //     setZipProgress('Processing images (this may take several minutes)...');
-
-  //     const response = await fetch('/api/batch-mosaic-zip', {
-  //       method: 'POST',
-  //       body: formData,
-  //     });
-
-  //     if (!response.ok) {
-  //       const errorData = await response.json();
-  //       throw new Error(errorData.error || 'ZIP processing failed');
-  //     }
-
-  //     setZipProgress('Downloading result...');
-
-  //     // Download the result ZIP file
-  //     const blob = await response.blob();
-  //     const url = window.URL.createObjectURL(blob);
-  //     const a = document.createElement('a');
-  //     a.href = url;
-  //     a.download = `mosaic_results_${Date.now()}.zip`;
-  //     document.body.appendChild(a);
-  //     a.click();
-  //     window.URL.revokeObjectURL(url);
-  //     document.body.removeChild(a);
-
-  //     setZipProgress('✅ Download complete! Check your downloads folder.');
-
-  //   } catch (err) {
-  //     setZipError(err instanceof Error ? err.message : 'ZIP processing failed');
-  //     console.error('ZIP processing error:', err);
-  //   } finally {
-  //     setIsProcessingZip(false);
-  //   }
-  // };
-
-  // const handleResetZip = () => {
-  //   setSelectedZipFile(null);
-  //   setZipError('');
-  //   setZipProgress('');
-  // };
-
-  const tabs = [
-    { id: 'single' as TabType, label: 'Single Image' },
-    // { id: 'multi' as TabType, label: 'Multi Image' },
-    // { id: 'zip' as TabType, label: 'ZIP Batch' }
-  ];
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-900">
       {/* Header */}
@@ -639,69 +380,37 @@ export default function MosaicTesterPage() {
 
       {/* Main Content */}
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Tab Navigation */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-8">
-          <div className="border-b border-gray-200 dark:border-gray-700">
-            <nav className="flex space-x-8 px-6" aria-label="Tabs">
-              {tabs.map((tab) => (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`
-                    py-4 px-1 border-b-2 font-medium text-sm whitespace-nowrap
-                    ${activeTab === tab.id
-                      ? 'border-green-500 text-green-600 dark:text-green-400'
-                      : 'border-transparent text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-300 hover:border-gray-300'
-                    }
-                  `}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </nav>
+        {/* Mask Type Selection */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-6 p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Processing Settings</h3>
+          <div className="max-w-xs">
+            <label htmlFor="mask-type-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Mask Type
+            </label>
+            <select
+              id="mask-type-select"
+              value={maskType}
+              onChange={(e) => setMaskType(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+            >
+              <option value="white_mask">Gaussian Blur</option>
+              <option value="mosaic">Pixel</option>
+            </select>
           </div>
+        </div>
 
-          {/* Tab Content */}
+        {/* Single Image Tester */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md mb-8">
           <div className="p-6">
-            {activeTab === 'single' ? (
-              <SingleImageTester
-                selectedFile={selectedFile}
-                previewUrl={previewUrl}
-                isProcessing={isProcessing}
-                processedImageUrl={processedImageUrl}
-                error={error}
-                onFileSelect={handleFileSelect}
-                onOpenModal={openModal}
-              />
-            ) : null
-            // : activeTab === 'multi' ? (
-            //   <MultiImageTester
-            //     selectedFiles={selectedFiles}
-            //     previewUrls={previewUrls}
-            //     isProcessing={isProcessingMulti}
-            //     processedImageUrls={processedImageUrls}
-            //     error={multiError}
-            //     onFileSelect={handleMultiFileSelect}
-            //     onProcess={handleProcessMulti}
-            //     onReset={handleResetMulti}
-            //     onRemoveImage={removeImage}
-            //     onDragOver={handleDragOver}
-            //     onDrop={handleDrop}
-            //     onOpenModal={openModal}
-            //   />
-            // ) : null
-            // : (
-            //   <ZipBatchTester
-            //     selectedZipFile={selectedZipFile}
-            //     isProcessing={isProcessingZip}
-            //     progress={zipProgress}
-            //     error={zipError}
-            //     onFileSelect={handleZipFileSelect}
-            //     onProcess={handleZipProcess}
-            //     onReset={handleResetZip}
-            //   />
-            // )
-            }
+            <SingleImageTester
+              selectedFile={selectedFile}
+              previewUrl={previewUrl}
+              isProcessing={isProcessing}
+              processedImageUrl={processedImageUrl}
+              error={error}
+              onFileSelect={handleFileSelect}
+              onOpenModal={openModal}
+            />
           </div>
         </div>
 

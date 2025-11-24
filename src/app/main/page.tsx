@@ -27,6 +27,14 @@ export default function HomeIndexPage() {
       icon: '🔍',
       color: 'from-green-500 to-green-600',
       hoverColor: 'hover:from-green-600 hover:to-green-700'
+    },
+    {
+      title: 'Mosaic Generator',
+      description: 'Generate mosaic-free images with advanced model selection',
+      path: '/mosaic-generator',
+      icon: '⚙️',
+      color: 'from-orange-500 to-orange-600',
+      hoverColor: 'hover:from-orange-600 hover:to-orange-700'
     }
   ];
 
@@ -106,7 +114,7 @@ export default function HomeIndexPage() {
           <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
             About These Tools
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-gray-600 dark:text-gray-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 text-gray-600 dark:text-gray-300">
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Dashboard V2</h4>
               <ul className="space-y-1 text-sm">
@@ -132,6 +140,15 @@ export default function HomeIndexPage() {
                 <li>• Upload and process test images</li>
                 <li>• Validate mosaic removal quality</li>
                 <li>• Compare before/after results</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Mosaic Generator</h4>
+              <ul className="space-y-1 text-sm">
+                <li>• Advanced model selection options</li>
+                <li>• Choose mosaic type processing</li>
+                <li>• Password-protected access</li>
+                <li>• Single image processing</li>
               </ul>
             </div>
           </div>

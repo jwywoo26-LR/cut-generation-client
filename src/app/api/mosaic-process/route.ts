@@ -30,14 +30,19 @@ class MosaicAPIClient {
     };
   }
 
-  async createMosaicSegmentationTask(imageS3Url: string, modelName?: string): Promise<MosaicSegmentationResponse> {
+  async createMosaicSegmentationTask(imageS3Url: string, modelName?: string, maskType?: string): Promise<MosaicSegmentationResponse> {
     const defaultModelName = process.env.MOSAIC_MODEL_NAME || 'segnext_l_model_A_363_pair_1110_iter_80000';
     const url = `${this.baseUrl}/api/v1/mosaic-segmentation`;
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       image_origin_s3_url: imageS3Url,
       model_name: modelName || defaultModelName
     };
+
+    // Add mask_type if provided
+    if (maskType) {
+      payload.mask_type = maskType;
+    }
 
     try {
       const response = await fetch(url, {
@@ -314,7 +319,7 @@ async function uploadImageToS3(imageBase64: string): Promise<string> {
 
 export async function POST(request: Request) {
   try {
-    const { imageData, modelName, account } = await request.json();
+    const { imageData, modelName, account, maskType } = await request.json();
 
     if (!imageData) {
       return NextResponse.json(
@@ -338,7 +343,8 @@ export async function POST(request: Request) {
     // Step 2: Create mosaic segmentation task with S3 URL
     const taskResult = await mosaicClient.createMosaicSegmentationTask(
       s3Url,
-      modelName
+      modelName,
+      maskType
     );
 
     const taskId = taskResult.task_id;
