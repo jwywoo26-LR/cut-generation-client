@@ -610,6 +610,7 @@ export default function MosaicGeneratorPage() {
                 error={multiError}
                 onFileSelect={handleMultiFileSelect}
                 onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
                 onProcess={handleProcessMulti}
                 onReset={handleResetMulti}
                 onRemoveImage={removeImage}
