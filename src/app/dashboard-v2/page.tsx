@@ -71,6 +71,15 @@ export default function DashboardV2Page() {
   // Tab state
   const [activeTab, setActiveTab] = useState<'manage' | 'generate'>('manage');
 
+  // Image generation state
+  const [isGeneratingPrompt, setIsGeneratingPrompt] = useState(false);
+  const [isGeneratingReference, setIsGeneratingReference] = useState(false);
+  const [promptGeneratedImage, setPromptGeneratedImage] = useState<string | null>(null);
+  const [referenceGeneratedImage, setReferenceGeneratedImage] = useState<string | null>(null);
+  const [generationError, setGenerationError] = useState<string>('');
+  const [selectedPromptType, setSelectedPromptType] = useState<'initial_prompt' | 'restyled_prompt' | 'edit_prompt'>('initial_prompt');
+  const [expandedImage, setExpandedImage] = useState<string | null>(null);
+
   // Check if user is already authenticated
   useEffect(() => {
     const authStatus = sessionStorage.getItem('dashboardV2Auth');
@@ -502,6 +511,221 @@ export default function DashboardV2Page() {
     if (currentIndex < records.length - 1) {
       const nextRecord = records[currentIndex + 1];
       handleRowClick(nextRecord);
+    }
+  };
+
+  // Helper function to convert image URL to base64
+  const imageUrlToBase64 = async (url: string): Promise<string> => {
+    const response = await fetch(url);
+    const blob = await response.blob();
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = base64String.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  };
+
+  // Handle prompt-only generation
+  const handleGeneratePromptOnly = async () => {
+    if (!selectedRecord) return;
+
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    // Get the selected prompt based on selectedPromptType
+    const prompt = editedFields[selectedPromptType] || selectedRecord.fields[selectedPromptType] as string;
+    if (!prompt) {
+      setGenerationError(`No ${selectedPromptType.replace('_', ' ')} available. Please add it first.`);
+      return;
+    }
+
+    // Get character_id from the current row
+    const characterId = editedFields.character_id || selectedRecord.fields.character_id as string;
+    if (!characterId) {
+      setGenerationError('No character ID available. Please add a character ID first.');
+      return;
+    }
+
+    setIsGeneratingPrompt(true);
+    setGenerationError('');
+    setPromptGeneratedImage(null);
+
+    try {
+      // Step 1: Create image generation task
+      const generationResponse = await fetch('/api/single-image-generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          generationType: 'prompt_only',
+          prompt: prompt,
+          bodyModelId: characterId,
+          width: 1024,
+          height: 1024,
+        }),
+      });
+
+      if (!generationResponse.ok) {
+        const errorData = await generationResponse.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(`Failed to create image generation task: ${errorData.error || generationResponse.statusText}`);
+      }
+
+      const generationData = await generationResponse.json();
+      const synthId = generationData.synth_id;
+      const imageUrl = generationData.image_url;
+
+      if (!imageUrl) {
+        throw new Error('No image URL returned from generation');
+      }
+
+      // Step 2: Create generation log
+      const currentIndex = records.findIndex(r => r.id === selectedRecord.id);
+      const logResponse = await fetch('/api/generation-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          rowIndex: currentIndex,
+          generationType: 'prompt_only',
+          usedPrompt: prompt,
+          synthId: synthId,
+        }),
+      });
+
+      const logData = await logResponse.json();
+      const logId = logData.log_id;
+
+      // Step 3: Update generation log with generated image
+      if (logId) {
+        await fetch('/api/generation-logs', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            logId: logId,
+            generatedImageUrl: imageUrl,
+          }),
+        });
+      }
+
+      // Display the generated image
+      setPromptGeneratedImage(imageUrl);
+      console.log('✅ Prompt-only image generated:', imageUrl);
+    } catch (error) {
+      console.error('Error generating prompt-only image:', error);
+      setGenerationError(error instanceof Error ? error.message : 'Failed to generate image');
+    } finally {
+      setIsGeneratingPrompt(false);
+    }
+  };
+
+  // Handle reference-based generation
+  const handleGenerateWithReference = async () => {
+    if (!selectedRecord) return;
+
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    // Get the selected prompt based on selectedPromptType
+    const prompt = editedFields[selectedPromptType] || selectedRecord.fields[selectedPromptType] as string;
+    if (!prompt) {
+      setGenerationError(`No ${selectedPromptType.replace('_', ' ')} available. Please add it first.`);
+      return;
+    }
+
+    // Get character_id from the current row
+    const characterId = editedFields.character_id || selectedRecord.fields.character_id as string;
+    if (!characterId) {
+      setGenerationError('No character ID available. Please add a character ID first.');
+      return;
+    }
+
+    // Check for reference image
+    const referenceImageField = selectedRecord.fields.reference_image_attached;
+    if (!referenceImageField || !Array.isArray(referenceImageField) || referenceImageField.length === 0) {
+      setGenerationError('No reference image available. Please upload a reference image first.');
+      return;
+    }
+
+    const referenceImageUrl = (referenceImageField[0] as AirtableAttachment).url;
+
+    setIsGeneratingReference(true);
+    setGenerationError('');
+    setReferenceGeneratedImage(null);
+
+    try {
+      // Step 1: Convert reference image to base64
+      const referenceBase64 = await imageUrlToBase64(referenceImageUrl);
+
+      // Step 2: Create image generation task
+      const generationResponse = await fetch('/api/single-image-generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          generationType: 'reference',
+          prompt: prompt,
+          bodyModelId: characterId,
+          referenceImageBase64: referenceBase64,
+          width: 1024,
+          height: 1024,
+          fastMode: false,
+        }),
+      });
+
+      if (!generationResponse.ok) {
+        const errorData = await generationResponse.json().catch(() => ({ error: 'Unknown error' }));
+        throw new Error(`Failed to create image generation task: ${errorData.error || generationResponse.statusText}`);
+      }
+
+      const generationData = await generationResponse.json();
+      const synthId = generationData.synth_id;
+      const imageUrl = generationData.image_url;
+
+      if (!imageUrl) {
+        throw new Error('No image URL returned from generation');
+      }
+
+      // Step 3: Create generation log
+      const currentIndex = records.findIndex(r => r.id === selectedRecord.id);
+      const logResponse = await fetch('/api/generation-logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          rowIndex: currentIndex,
+          generationType: 'reference',
+          usedPrompt: prompt,
+          synthId: synthId,
+        }),
+      });
+
+      const logData = await logResponse.json();
+      const logId = logData.log_id;
+
+      // Step 4: Update generation log with generated image
+      if (logId) {
+        await fetch('/api/generation-logs', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            logId: logId,
+            generatedImageUrl: imageUrl,
+          }),
+        });
+      }
+
+      // Display the generated image
+      setReferenceGeneratedImage(imageUrl);
+      console.log('✅ Reference-based image generated:', imageUrl);
+    } catch (error) {
+      console.error('Error generating reference-based image:', error);
+      setGenerationError(error instanceof Error ? error.message : 'Failed to generate image');
+    } finally {
+      setIsGeneratingReference(false);
     }
   };
 
@@ -1151,7 +1375,7 @@ export default function DashboardV2Page() {
 
       {/* Detail Modal - Side Panel */}
       {showDetailModal && selectedRecord ? (
-        <div className="fixed right-0 top-0 h-full z-[9999] w-full max-w-4xl pointer-events-none">
+        <div className="fixed right-0 top-0 h-full z-[9999] w-full max-w-7xl pointer-events-none">
           {/* Modal panel */}
           <div className="h-full bg-white dark:bg-gray-800 shadow-2xl overflow-y-auto border-l border-gray-200 dark:border-gray-700 pointer-events-auto">
               {/* Modal Header */}
@@ -1171,10 +1395,105 @@ export default function DashboardV2Page() {
                 </div>
               </div>
 
-              {/* Modal Body - Two Column Layout */}
+              {/* Modal Body - Three Column Layout */}
               <div className="px-6 py-4 max-h-[calc(100vh-140px)] overflow-y-auto">
-                <div className="grid grid-cols-2 gap-6">
-                  {/* Left Column - Images */}
+                <div className="grid grid-cols-3 gap-6">
+                  {/* Left Column - New Generated Images */}
+                  <div className="space-y-6">
+                    <h3 className="text-md font-semibold text-gray-900 dark:text-white">
+                      New Generations
+                    </h3>
+
+                    {/* Prompt-Only Generated */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Generated (Prompt Only)
+                      </label>
+                      {isGeneratingPrompt ? (
+                        <div className="w-full h-96 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <div className="text-center text-gray-400">
+                            <svg className="animate-spin mx-auto h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p className="text-xs">Generating...</p>
+                          </div>
+                        </div>
+                      ) : promptGeneratedImage ? (
+                        <div className="relative group">
+                          <img
+                            src={promptGeneratedImage}
+                            alt="Prompt Only Generated"
+                            className="w-full h-96 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                          />
+                          <button
+                            onClick={() => setExpandedImage(promptGeneratedImage)}
+                            className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Expand image"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full h-96 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <div className="text-center text-gray-400">
+                            <svg className="mx-auto h-8 w-8 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p className="text-xs">No image yet</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Reference-Based Generated */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Generated (Reference)
+                      </label>
+                      {isGeneratingReference ? (
+                        <div className="w-full h-96 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <div className="text-center text-gray-400">
+                            <svg className="animate-spin mx-auto h-8 w-8 mb-2" fill="none" viewBox="0 0 24 24">
+                              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                            </svg>
+                            <p className="text-xs">Generating...</p>
+                          </div>
+                        </div>
+                      ) : referenceGeneratedImage ? (
+                        <div className="relative group">
+                          <img
+                            src={referenceGeneratedImage}
+                            alt="Reference Generated"
+                            className="w-full h-96 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                          />
+                          <button
+                            onClick={() => setExpandedImage(referenceGeneratedImage)}
+                            className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                            title="Expand image"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-full h-96 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 dark:border-gray-600">
+                          <div className="text-center text-gray-400">
+                            <svg className="mx-auto h-8 w-8 mb-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                            <p className="text-xs">No image yet</p>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Middle Column - Reference + Existing Generated Images */}
                   <div className="space-y-6">
                     {/* Reference Image */}
                     <div>
@@ -1199,31 +1518,31 @@ export default function DashboardV2Page() {
                       )}
                     </div>
 
-                    {/* Generated Images */}
+                    {/* Existing Generated Images - Horizontal Layout */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                        Generated Images
+                        Stored Images
                       </label>
-                      <div className="space-y-3">
+                      <div className="grid grid-cols-3 gap-3">
                         {[1, 2, 3].map((num) => {
                           const imageField = selectedRecord.fields[`image_${num}`];
                           if (imageField && Array.isArray(imageField) && imageField.length > 0) {
                             return (
                               <div key={num} className="space-y-1">
-                                <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Image #{num}</p>
+                                <p className="text-xs font-medium text-gray-600 dark:text-gray-400 text-center">#{num}</p>
                                 <img
                                   src={(imageField[0] as AirtableAttachment)?.url}
                                   alt={`Generated ${num}`}
-                                  className="w-full rounded-lg border border-gray-300 dark:border-gray-600"
+                                  className="w-full h-48 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
                                 />
                               </div>
                             );
                           }
                           return (
                             <div key={num} className="space-y-1">
-                              <p className="text-xs font-medium text-gray-600 dark:text-gray-400">Image #{num}</p>
-                              <div className="w-full h-32 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-300 dark:border-gray-600">
-                                <p className="text-xs text-gray-400">No image</p>
+                              <p className="text-xs font-medium text-gray-600 dark:text-gray-400 text-center">#{num}</p>
+                              <div className="w-full h-48 bg-gray-100 dark:bg-gray-700 rounded-lg flex items-center justify-center border border-gray-300 dark:border-gray-600">
+                                <p className="text-xs text-gray-400">Empty</p>
                               </div>
                             </div>
                           );
@@ -1301,6 +1620,86 @@ export default function DashboardV2Page() {
                         <option value="true">true</option>
                       </select>
                     </div>
+
+                    {/* Image Generation Buttons */}
+                    <div className="border-t border-gray-200 dark:border-gray-600 pt-6">
+                      <h4 className="text-md font-semibold text-gray-900 dark:text-white mb-4">
+                        Generate Images
+                      </h4>
+
+                      {/* Prompt Type Selector */}
+                      <div className="mb-4">
+                        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                          Select Prompt to Use
+                        </label>
+                        <select
+                          value={selectedPromptType}
+                          onChange={(e) => setSelectedPromptType(e.target.value as 'initial_prompt' | 'restyled_prompt' | 'edit_prompt')}
+                          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        >
+                          <option value="initial_prompt">Initial Prompt</option>
+                          <option value="restyled_prompt">Restyled Prompt</option>
+                          <option value="edit_prompt">Edit Prompt</option>
+                        </select>
+                      </div>
+
+                      {generationError && (
+                        <div className="mb-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">
+                          <p className="text-sm text-red-800 dark:text-red-200">
+                            {generationError}
+                          </p>
+                        </div>
+                      )}
+
+                      <div className="space-y-3">
+                        <button
+                          onClick={handleGeneratePromptOnly}
+                          disabled={isGeneratingReference || isGeneratingPrompt}
+                          className={`w-full px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+                            isGeneratingReference || isGeneratingPrompt
+                              ? 'bg-gray-400 cursor-not-allowed'
+                              : 'bg-green-600 hover:bg-green-700 text-white'
+                          }`}
+                        >
+                          {isGeneratingPrompt ? (
+                            <span className="flex items-center justify-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Generating...
+                            </span>
+                          ) : (
+                            'Generate from Prompt Only'
+                          )}
+                        </button>
+                        <button
+                          onClick={handleGenerateWithReference}
+                          disabled={isGeneratingReference || isGeneratingPrompt}
+                          className={`w-full px-4 py-3 rounded-md text-sm font-medium transition-colors ${
+                            isGeneratingReference || isGeneratingPrompt
+                              ? 'bg-gray-400 cursor-not-allowed'
+                              : 'bg-blue-600 hover:bg-blue-700 text-white'
+                          }`}
+                        >
+                          {isGeneratingReference ? (
+                            <span className="flex items-center justify-center">
+                              <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Generating...
+                            </span>
+                          ) : (
+                            'Generate with Reference'
+                          )}
+                        </button>
+                      </div>
+
+                      <p className="mt-3 text-xs text-gray-500 dark:text-gray-400 text-center">
+                        Generated images will appear in the left column
+                      </p>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1368,6 +1767,30 @@ export default function DashboardV2Page() {
             </div>
         </div>
       ) : null}
+
+      {/* Fullscreen Image Viewer */}
+      {expandedImage && (
+        <div
+          className="fixed inset-0 z-[99999] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setExpandedImage(null)}
+        >
+          <button
+            onClick={() => setExpandedImage(null)}
+            className="absolute top-4 right-4 text-white hover:text-gray-300 bg-black/50 hover:bg-black/70 p-2 rounded-lg"
+            title="Close"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <img
+            src={expandedImage}
+            alt="Expanded view"
+            className="max-w-full max-h-full object-contain"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }
