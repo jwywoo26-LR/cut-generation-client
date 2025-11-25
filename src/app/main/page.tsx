@@ -43,6 +43,14 @@ export default function HomeIndexPage() {
       icon: '🌐',
       color: 'from-pink-500 to-pink-600',
       hoverColor: 'hover:from-pink-600 hover:to-pink-700'
+    },
+    {
+      title: 'Image Editor',
+      description: 'Edit images with AI-powered transformations (password protected)',
+      path: '/image-editor',
+      icon: '✨',
+      color: 'from-indigo-500 to-indigo-600',
+      hoverColor: 'hover:from-indigo-600 hover:to-indigo-700'
     }
   ];
 
@@ -122,7 +130,7 @@ export default function HomeIndexPage() {
           <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
             About These Tools
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6 text-gray-600 dark:text-gray-300">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-gray-600 dark:text-gray-300">
             <div>
               <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Dashboard V2</h4>
               <ul className="space-y-1 text-sm">
@@ -166,6 +174,15 @@ export default function HomeIndexPage() {
                 <li>• Multiple translation styles</li>
                 <li>• Persona-based context</li>
                 <li>• Airtable integration</li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Image Editor</h4>
+              <ul className="space-y-1 text-sm">
+                <li>• AI-powered image transformations</li>
+                <li>• Single and batch processing</li>
+                <li>• Password-protected access</li>
+                <li>• Multiple edit types supported</li>
               </ul>
             </div>
           </div>
