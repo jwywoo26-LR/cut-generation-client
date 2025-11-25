@@ -1,9 +1,8 @@
 import { NextResponse } from 'next/server';
 
-export async function GET(request: Request) {
+export async function POST(request: Request) {
   try {
-    const { searchParams } = new URL(request.url);
-    const tableName = searchParams.get('tableName');
+    const { tableName } = await request.json();
 
     if (!tableName) {
       return NextResponse.json({ error: 'Table name is required' }, { status: 400 });
