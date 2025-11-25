@@ -42,7 +42,15 @@ async function callGeminiWithRetry(
   url: string,
   body: object,
   maxRetries = 3
-): Promise<any> {
+): Promise<{
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{
+        text?: string;
+      }>;
+    };
+  }>;
+}> {
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       const response = await fetch(url, {
@@ -69,6 +77,8 @@ async function callGeminiWithRetry(
       await new Promise(resolve => setTimeout(resolve, 1000 * Math.pow(2, attempt - 1)));
     }
   }
+
+  throw new Error('Translation failed after all retries');
 }
 
 export async function POST(request: Request) {

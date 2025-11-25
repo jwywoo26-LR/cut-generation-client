@@ -66,6 +66,7 @@ export default function TranslatorPage() {
     if (selectedTable) {
       loadRecords();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedTable]);
 
   // Filter personas when series is selected
