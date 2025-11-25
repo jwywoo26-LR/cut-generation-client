@@ -2,14 +2,18 @@ import { NextResponse } from 'next/server';
 
 export async function POST(request: Request) {
   try {
-    const { tableName, fields } = await request.json();
+    const { characterName, series, persona } = await request.json();
 
-    if (!tableName) {
-      return NextResponse.json({ error: 'Table name is required' }, { status: 400 });
+    if (!characterName || !series || !persona) {
+      return NextResponse.json(
+        { error: 'Character name, series, and persona are required' },
+        { status: 400 }
+      );
     }
 
     const airtableApiKey = process.env.AIRTABLE_API_KEY;
     const airtableBaseId = process.env.AIRTABLE_BASE_ID;
+    const tableName = 'dmm_persona';
 
     if (!airtableApiKey || !airtableBaseId) {
       return NextResponse.json(
@@ -20,16 +24,6 @@ export async function POST(request: Request) {
 
     const encodedTableName = encodeURIComponent(tableName);
 
-    // Use provided fields or create empty record with default dashboard fields
-    const recordFields: Record<string, unknown> = fields || {
-      character_id: '',
-      reference_image: '',
-      initial_prompt: '',
-      restyled_prompt: '',
-      edit_prompt: '',
-      regenerate_status: '',
-    };
-
     const response = await fetch(
       `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
       {
@@ -38,35 +32,37 @@ export async function POST(request: Request) {
           'Authorization': `Bearer ${airtableApiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ fields: recordFields }),
+        body: JSON.stringify({
+          fields: {
+            character_name: characterName,
+            series: series,
+            persona: persona
+          }
+        })
       }
     );
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Failed to create record:', errorText);
+      console.error('Airtable API error:', errorText);
       return NextResponse.json(
-        {
-          error: 'Failed to create record',
-          details: errorText,
-        },
+        { error: `Failed to create persona: ${response.status}` },
         { status: response.status }
       );
     }
 
-    const record = await response.json();
+    const data = await response.json();
 
     return NextResponse.json({
       success: true,
-      record: record,
-      message: 'Record created successfully',
+      record: data
     });
+
   } catch (error) {
+    console.error('Create persona error:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Failed to create persona';
     return NextResponse.json(
-      {
-        error: 'Failed to create record',
-        details: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { error: errorMessage },
       { status: 500 }
     );
   }
