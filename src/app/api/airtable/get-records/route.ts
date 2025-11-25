@@ -21,9 +21,6 @@ export async function GET(request: Request) {
 
     const encodedTableName = encodeURIComponent(tableName);
 
-    console.log('Fetching records from table:', tableName);
-    console.log('Airtable URL:', `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`);
-
     // Fetch records from the table
     const response = await fetch(
       `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,

@@ -90,12 +90,8 @@ export async function POST(request: Request) {
           contentType = 'image/webp';
         }
 
-        console.log(`Uploading to S3 [${i + 1}/${imageFiles.length}]:`, filename, contentType, buffer.length, 'bytes');
-
         // Upload to S3 and get the public URL
         const s3Url = await uploadToS3(buffer, filename, contentType);
-
-        console.log('S3 upload successful:', s3Url);
 
         const fields: Record<string, unknown> = {
           id: rowId,  // Random row ID
