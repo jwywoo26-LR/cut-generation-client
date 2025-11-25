@@ -84,6 +84,22 @@ export default function HomeIndexPage() {
       icon: '🔊',
       color: 'from-amber-500 to-amber-600',
       hoverColor: 'hover:from-amber-600 hover:to-amber-700'
+    },
+    {
+      title: 'NSFW DB Manager',
+      description: 'Manage NSFW database records and perform data operations',
+      path: '/nsfw-db-manager',
+      icon: '🗄️',
+      color: 'from-slate-500 to-slate-600',
+      hoverColor: 'hover:from-slate-600 hover:to-slate-700'
+    },
+    {
+      title: 'Crawler',
+      description: 'Web crawler for collecting and processing content',
+      path: '/crawler',
+      icon: '🕷️',
+      color: 'from-red-500 to-red-600',
+      hoverColor: 'hover:from-red-600 hover:to-red-700'
     }
   ];
 
