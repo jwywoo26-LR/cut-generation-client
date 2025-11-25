@@ -121,8 +121,7 @@ export async function POST(request: Request) {
         );
 
         if (response.ok) {
-          const record = await response.json();
-          console.log('Created record:', record.id);
+          await response.json();
           createdRecords.push(rowId);
         } else {
           const errorText = await response.text();

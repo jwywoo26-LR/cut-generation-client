@@ -8,14 +8,6 @@ export async function POST(request: Request) {
     const recordId = formData.get('recordId') as string;
     const file = formData.get('file') as File;
 
-    console.log('Received upload request:', {
-      tableName,
-      recordId,
-      fileName: file?.name,
-      fileType: file?.type,
-      fileSize: file?.size,
-    });
-
     if (!tableName) {
       return NextResponse.json({ error: 'Table name is required' }, { status: 400 });
     }
@@ -63,12 +55,8 @@ export async function POST(request: Request) {
       contentType = 'image/webp';
     }
 
-    console.log('Uploading to S3:', filename, contentType, buffer.length, 'bytes');
-
     // Upload to S3 and get the public URL
     const s3Url = await uploadToS3(buffer, filename, contentType);
-
-    console.log('S3 upload successful:', s3Url);
 
     const fields: Record<string, unknown> = {
       reference_image: filename,
@@ -78,14 +66,6 @@ export async function POST(request: Request) {
         },
       ],
     };
-
-    console.log('Sending to Airtable:', {
-      url: `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}/${recordId}`,
-      fields: {
-        reference_image: filename,
-        reference_image_attached_length: 1,
-      },
-    });
 
     const response = await fetch(
       `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}/${recordId}`,
@@ -117,7 +97,6 @@ export async function POST(request: Request) {
     }
 
     const record = await response.json();
-    console.log('Successfully updated record:', record.id);
 
     return NextResponse.json({
       success: true,

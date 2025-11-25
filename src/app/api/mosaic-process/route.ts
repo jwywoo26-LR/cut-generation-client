@@ -184,88 +184,6 @@ async function downloadImageWithFallback(s3Uri: string): Promise<Buffer> {
   }
 }
 
-// Helper function to save S3 URL to Airtable
-async function uploadS3ImageToAirtable(
-  urlOrS3Uri: string,
-  tableName: string,
-  taskId: string,
-  inputImageUrl?: string,
-  account?: string
-): Promise<string> {
-  try {
-    // If it's already an HTTP URL (presigned), use it directly
-    // Otherwise, convert S3 URI to HTTP URL
-    let httpUrl: string;
-    if (urlOrS3Uri.startsWith('http://') || urlOrS3Uri.startsWith('https://')) {
-      httpUrl = urlOrS3Uri;
-    } else {
-      httpUrl = convertS3UriToHttpUrl(urlOrS3Uri);
-    }
-
-    // Upload to Airtable
-    const airtableApiKey = process.env.AIRTABLE_API_KEY;
-    const airtableBaseId = process.env.AIRTABLE_BASE_ID;
-
-    if (!airtableApiKey || !airtableBaseId) {
-      throw new Error('Airtable credentials not configured');
-    }
-
-    // Encode table name for URL (following dashboard pattern)
-    const encodedTableName = encodeURIComponent(tableName);
-
-    // Prepare fields for Airtable record
-    // Save HTTP URL directly (matching Python CSV approach)
-    const fields: Record<string, unknown> = {
-      'request_id': taskId,
-      'created_at': new Date().toISOString(),
-      'progress': 100,
-      'output_image': [{
-        url: httpUrl
-      }]
-    };
-
-    // Optionally add input image URL if provided (this is from public bucket so URL works)
-    if (inputImageUrl) {
-      fields['input_image'] = [{ url: inputImageUrl }];
-    }
-
-    // Add account information if provided
-    if (account) {
-      fields['account'] = account;
-    }
-
-    // Create a record with the image attachment
-    const createResponse = await fetch(
-      `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
-      {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${airtableApiKey}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ fields })
-      }
-    );
-
-    if (!createResponse.ok) {
-      const errorText = await createResponse.text();
-      throw new Error(`Airtable upload failed: ${createResponse.status} - ${errorText}`);
-    }
-
-    const airtableRecord = await createResponse.json();
-
-    // Extract the CDN URL from Airtable's attachment
-    const attachments = airtableRecord.fields.output_image;
-    if (attachments && attachments.length > 0) {
-      return attachments[0].url;
-    }
-
-    throw new Error('No URL returned from Airtable');
-  } catch (error) {
-    throw error;
-  }
-}
-
 // Helper function to upload image to S3 and get S3 URL
 async function uploadImageToS3(imageBase64: string): Promise<string> {
   try {
@@ -367,19 +285,8 @@ export async function POST(request: Request) {
         const presignedUrl = statusResponse.result_s3_url;
         const s3Uri = statusResponse.save_s3_url;
 
-        let resultUrl = null;
-        const urlToSave = presignedUrl || s3Uri;
-
-        if (urlToSave) {
-          // Save URL to Airtable for tracking
-          const airtableTableName = 'mosic_table';  // Note: actual table name is 'mosic_table' (without the 'a')
-
-          // Convert input S3 URI to HTTP URL for Airtable
-          const inputHttpUrl = convertS3UriToHttpUrl(s3Url);
-
-          // Pass both the output URL and the input image HTTP URL, and account info
-          resultUrl = await uploadS3ImageToAirtable(urlToSave, airtableTableName, taskId, inputHttpUrl, account);
-        }
+        // Use presigned URL directly as the result URL
+        const resultUrl = presignedUrl || convertS3UriToHttpUrl(s3Uri || '');
 
         return NextResponse.json({
           success: true,

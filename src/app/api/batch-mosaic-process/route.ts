@@ -150,113 +150,7 @@ async function downloadImageWithFallback(s3Uri: string): Promise<Buffer> {
   return await downloadImageFromS3(s3Uri);
 }
 
-// Helper to save metadata to Airtable
-async function saveMetadataToAirtable(
-  taskId: string,
-  beforeHttpUrl: string,
-  afterHttpUrl: string
-): Promise<void> {
-  const airtableApiKey = process.env.AIRTABLE_API_KEY;
-  const airtableBaseId = process.env.AIRTABLE_BASE_ID;
-
-  if (!airtableApiKey || !airtableBaseId) {
-    throw new Error('Airtable credentials not configured');
-  }
-
-  const tableName = 'mosic_table';
-  const encodedTableName = encodeURIComponent(tableName);
-
-  const fields: Record<string, unknown> = {
-    request_id: taskId,
-    created_at: new Date().toISOString(),
-    progress: 100,
-    input_image: [{ url: beforeHttpUrl }],
-    output_image: [{ url: afterHttpUrl }],
-  };
-
-  const createResponse = await fetch(
-    `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${airtableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fields }),
-    }
-  );
-
-  if (!createResponse.ok) {
-    const errorText = await createResponse.text();
-    throw new Error(`Airtable save failed: ${createResponse.status} - ${errorText}`);
-  }
-}
-
-// Helper to upload image to Airtable and get public CDN URL
-// This downloads the image from S3 and re-uploads to Airtable
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function uploadToAirtable(
-  s3Uri: string,
-  taskId: string,
-  inputImageUrl: string
-): Promise<string> {
-  const buffer = await downloadImageWithFallback(s3Uri);
-  const base64Image = buffer.toString('base64');
-
-  const airtableApiKey = process.env.AIRTABLE_API_KEY;
-  const airtableBaseId = process.env.AIRTABLE_BASE_ID;
-
-  if (!airtableApiKey || !airtableBaseId) {
-    throw new Error('Airtable credentials not configured');
-  }
-
-  const tableName = 'mosic_table';
-  const encodedTableName = encodeURIComponent(tableName);
-  const filename = s3Uri.split('/').pop() || 'mosaic_result.png';
-
-  const fields: Record<string, unknown> = {
-    request_id: taskId,
-    created_at: new Date().toISOString(),
-    progress: 100,
-    output_image: [
-      {
-        filename: filename,
-        contentType: 'image/png',
-        base64: base64Image,
-      },
-    ],
-  };
-
-  if (inputImageUrl) {
-    fields['input_image'] = [{ url: inputImageUrl }];
-  }
-
-  const createResponse = await fetch(
-    `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${airtableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fields }),
-    }
-  );
-
-  if (!createResponse.ok) {
-    const errorText = await createResponse.text();
-    throw new Error(`Airtable upload failed: ${createResponse.status} - ${errorText}`);
-  }
-
-  const airtableRecord = await createResponse.json();
-  const attachments = airtableRecord.fields.output_image;
-
-  if (attachments && attachments.length > 0) {
-    return attachments[0].url;
-  }
-
-  throw new Error('No URL returned from Airtable');
-}
+// Airtable upload functions removed
 
 // Process a single image
 async function processSingleImage(
@@ -335,29 +229,14 @@ async function processSingleImage(
               processedFilename
             );
 
-            // Save to Airtable - convert S3 URIs to HTTP URLs
-            const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
-            const afterHttpUrl = convertS3UriToHttpUrl(afterS3Url);
-            await saveMetadataToAirtable(taskId, beforeHttpUrl, afterHttpUrl);
+            // Airtable upload removed
           } catch {
             // Fallback: just save the presigned URL
             afterS3Url = presignedUrl;
-            try {
-              const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
-              await saveMetadataToAirtable(taskId, beforeHttpUrl, afterS3Url);
-            } catch {
-              // Airtable save failed silently
-            }
           }
         } else if (s3Uri) {
           // No presigned URL available, convert S3 URI
           afterS3Url = convertS3UriToHttpUrl(s3Uri);
-          try {
-            const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
-            await saveMetadataToAirtable(taskId, beforeHttpUrl, afterS3Url);
-          } catch {
-            // Airtable save failed silently
-          }
         }
 
         return {

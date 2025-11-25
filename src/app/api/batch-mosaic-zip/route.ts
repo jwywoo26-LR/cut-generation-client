@@ -86,47 +86,7 @@ function convertS3UriToHttpUrl(s3Uri: string): string {
   return `https://${bucket}.s3.${region}.amazonaws.com/${key}`;
 }
 
-// Helper to save metadata to Airtable
-async function saveMetadataToAirtable(
-  taskId: string,
-  beforeHttpUrl: string,
-  afterHttpUrl: string
-): Promise<void> {
-  const airtableApiKey = process.env.AIRTABLE_API_KEY;
-  const airtableBaseId = process.env.AIRTABLE_BASE_ID;
-
-  if (!airtableApiKey || !airtableBaseId) {
-    return;
-  }
-
-  const tableName = 'mosic_table';
-  const encodedTableName = encodeURIComponent(tableName);
-
-  const fields: Record<string, unknown> = {
-    request_id: taskId,
-    created_at: new Date().toISOString(),
-    progress: 100,
-    input_image: [{ url: beforeHttpUrl }],
-    output_image: [{ url: afterHttpUrl }],
-  };
-
-  const createResponse = await fetch(
-    `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
-    {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${airtableApiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ fields }),
-    }
-  );
-
-  if (!createResponse.ok) {
-    const errorText = await createResponse.text();
-    throw new Error(`Airtable save failed: ${createResponse.status} - ${errorText}`);
-  }
-}
+// Airtable upload function removed
 
 export async function POST(request: Request) {
   try {
@@ -277,13 +237,7 @@ export async function POST(request: Request) {
               buffer: imageBuffer,
             });
 
-            // Save to Airtable - convert S3 URIs to HTTP URLs
-            try {
-              const beforeHttpUrl = convertS3UriToHttpUrl(beforeS3Url);
-              await saveMetadataToAirtable(taskId, beforeHttpUrl, presignedUrl);
-            } catch {
-              // Airtable save failed silently
-            }
+            // Airtable upload removed
           } else {
             throw new Error(`Failed to download result: ${imageResponse.status}`);
           }

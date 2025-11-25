@@ -24,12 +24,6 @@ export async function DELETE(request: Request) {
 
     const encodedTableName = encodeURIComponent(tableName);
 
-    console.log('Deleting record:', {
-      tableName,
-      recordId,
-      url: `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}/${recordId}`,
-    });
-
     const response = await fetch(
       `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}/${recordId}`,
       {
@@ -53,7 +47,6 @@ export async function DELETE(request: Request) {
     }
 
     const result = await response.json();
-    console.log('Successfully deleted record:', result);
 
     return NextResponse.json({
       success: true,
