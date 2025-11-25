@@ -1,17 +1,23 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 
+type TabType = 'client' | 'tools';
+
+interface PageItem {
+  title: string;
+  description: string;
+  path: string;
+  icon: string;
+  color: string;
+  hoverColor: string;
+}
+
 export default function HomeIndexPage() {
-  const pages = [
-    {
-      title: 'Dashboard V2',
-      description: 'Character reference management with prompt and image generation',
-      path: '/dashboard-v2',
-      icon: '🎨',
-      color: 'from-blue-500 to-blue-600',
-      hoverColor: 'hover:from-blue-600 hover:to-blue-700'
-    },
+  const [activeTab, setActiveTab] = useState<TabType>('tools');
+
+  const clientPages: PageItem[] = [
     {
       title: 'Layer Extractor',
       description: 'Extract and process PSD layers (password protected)',
@@ -27,6 +33,17 @@ export default function HomeIndexPage() {
       icon: '🔍',
       color: 'from-green-500 to-green-600',
       hoverColor: 'hover:from-green-600 hover:to-green-700'
+    }
+  ];
+
+  const toolsPages: PageItem[] = [
+    {
+      title: 'Dashboard V2',
+      description: 'Character reference management with prompt and image generation',
+      path: '/dashboard-v2',
+      icon: '🎨',
+      color: 'from-blue-500 to-blue-600',
+      hoverColor: 'hover:from-blue-600 hover:to-blue-700'
     },
     {
       title: 'Mosaic Generator',
@@ -51,8 +68,26 @@ export default function HomeIndexPage() {
       icon: '✨',
       color: 'from-indigo-500 to-indigo-600',
       hoverColor: 'hover:from-indigo-600 hover:to-indigo-700'
+    },
+    {
+      title: 'Character Training',
+      description: 'Train and fine-tune character models for generation',
+      path: '/character-training',
+      icon: '🧠',
+      color: 'from-teal-500 to-teal-600',
+      hoverColor: 'hover:from-teal-600 hover:to-teal-700'
+    },
+    {
+      title: 'Sound Effect',
+      description: 'Generate and manage sound effects for manhwa',
+      path: '/sound-effect',
+      icon: '🔊',
+      color: 'from-amber-500 to-amber-600',
+      hoverColor: 'hover:from-amber-600 hover:to-amber-700'
     }
   ];
+
+  const currentPages = activeTab === 'client' ? clientPages : toolsPages;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
@@ -68,10 +103,40 @@ export default function HomeIndexPage() {
         </div>
       </div>
 
+      {/* Tabs */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8">
+        <div className="flex space-x-1 bg-gray-200 dark:bg-gray-700 rounded-xl p-1 w-fit">
+          <button
+            onClick={() => setActiveTab('tools')}
+            className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 ${
+              activeTab === 'tools'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-md'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            Tools
+          </button>
+          <button
+            onClick={() => setActiveTab('client')}
+            className={`px-6 py-3 rounded-lg font-semibold text-sm transition-all duration-200 ${
+              activeTab === 'client'
+                ? 'bg-white dark:bg-gray-800 text-gray-900 dark:text-white shadow-md'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white'
+            }`}
+          >
+            Client
+          </button>
+        </div>
+      </div>
+
       {/* Main Content */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {pages.map((page) => (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div className={`grid gap-6 ${
+          activeTab === 'client'
+            ? 'grid-cols-1 md:grid-cols-2'
+            : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-4'
+        }`}>
+          {currentPages.map((page) => (
             <Link
               key={page.path}
               href={page.path}
@@ -123,69 +188,6 @@ export default function HomeIndexPage() {
               </div>
             </Link>
           ))}
-        </div>
-
-        {/* Additional Info Section */}
-        <div className="mt-16 bg-white dark:bg-gray-800 rounded-xl shadow-md p-8">
-          <h3 className="text-2xl font-semibold text-gray-900 dark:text-white mb-4">
-            About These Tools
-          </h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-gray-600 dark:text-gray-300">
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Dashboard V2</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• Create and manage Airtable tables</li>
-                <li>• AI-powered prompt generation</li>
-                <li>• Character reference management</li>
-                <li>• Draft image generation workflow</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Layer Extractor</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• Extract layers from PSD files</li>
-                <li>• Password-protected access</li>
-                <li>• Process multiple files at once</li>
-                <li>• Download processed results</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Mosaic Tester</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• Test mosaic detection algorithms</li>
-                <li>• Upload and process test images</li>
-                <li>• Validate mosaic removal quality</li>
-                <li>• Compare before/after results</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Mosaic Generator</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• Advanced model selection options</li>
-                <li>• Choose mosaic type processing</li>
-                <li>• Password-protected access</li>
-                <li>• Single image processing</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Translator</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• Korean to Japanese translation</li>
-                <li>• Multiple translation styles</li>
-                <li>• Persona-based context</li>
-                <li>• Airtable integration</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-gray-900 dark:text-white mb-2">Image Editor</h4>
-              <ul className="space-y-1 text-sm">
-                <li>• AI-powered image transformations</li>
-                <li>• Single and batch processing</li>
-                <li>• Password-protected access</li>
-                <li>• Multiple edit types supported</li>
-              </ul>
-            </div>
-          </div>
         </div>
 
         {/* Footer */}
