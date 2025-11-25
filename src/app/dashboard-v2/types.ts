@@ -22,6 +22,6 @@ export interface AirtableRecord {
   createdTime: string;
 }
 
-export type TabType = 'manage' | 'generate';
+export type TabType = 'manage' | 'prompt_generation' | 'mass_generation';
 
 export type PromptType = 'initial_prompt' | 'restyled_prompt' | 'edit_prompt';

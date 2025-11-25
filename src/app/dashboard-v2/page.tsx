@@ -9,7 +9,9 @@ import {
   UploadSection,
   RecordDetailModal,
   ImageViewer,
+  AvailableCharacters,
 } from './components';
+import type { Character } from './components';
 import { AirtableTable, AirtableRecord, AirtableAttachment, TabType, PromptType } from './types';
 
 export default function DashboardV2Page() {
@@ -47,6 +49,9 @@ export default function DashboardV2Page() {
   // Per-row delete state
   const [deletingRecordId, setDeletingRecordId] = useState<string | null>(null);
 
+  // Per-row status update state
+  const [updatingStatusRecordId, setUpdatingStatusRecordId] = useState<string | null>(null);
+
   // Detail modal state
   const [selectedRecord, setSelectedRecord] = useState<AirtableRecord | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -65,6 +70,11 @@ export default function DashboardV2Page() {
   const [selectedPromptType, setSelectedPromptType] = useState<PromptType>('initial_prompt');
   const [expandedImage, setExpandedImage] = useState<string | null>(null);
 
+  // Available characters state
+  const [characters, setCharacters] = useState<Character[]>([]);
+  const [isLoadingCharacters, setIsLoadingCharacters] = useState(false);
+  const [applyingCharacterId, setApplyingCharacterId] = useState<string | null>(null);
+
   // Check if user is already authenticated
   useEffect(() => {
     const authStatus = sessionStorage.getItem('dashboardV2Auth');
@@ -73,10 +83,11 @@ export default function DashboardV2Page() {
     }
   }, []);
 
-  // Load tables when authenticated
+  // Load tables and characters when authenticated
   useEffect(() => {
     if (isAuthenticated) {
       loadTables();
+      loadCharacters();
     }
   }, [isAuthenticated]);
 
@@ -123,6 +134,85 @@ export default function DashboardV2Page() {
     sessionStorage.removeItem('dashboardV2Auth');
     setPassword('');
     setAuthError('');
+  };
+
+  // ===== Characters Handlers =====
+  const loadCharacters = async () => {
+    setIsLoadingCharacters(true);
+    try {
+      const response = await fetch('/api/airtable/get-records', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableName: 'dmm_characters' }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const activeCharacters = (data.records || [])
+          .filter((record: AirtableRecord) => record.fields.status === 'active')
+          .map((record: AirtableRecord) => {
+            // Handle character_image as either attachment array or plain string URL
+            let imageUrl = '';
+            const imageField = record.fields.character_image;
+            if (Array.isArray(imageField) && imageField.length > 0) {
+              // It's an attachment field
+              imageUrl = (imageField[0] as AirtableAttachment).url || '';
+            } else if (typeof imageField === 'string') {
+              // It's a plain URL string
+              imageUrl = imageField;
+            }
+
+            return {
+              id: record.id,
+              character_id: (record.fields.character_id as string) || '',
+              character_name: (record.fields.character_name as string) || '',
+              character_image: imageUrl,
+              status: (record.fields.status as string) || '',
+            };
+          });
+        setCharacters(activeCharacters);
+      }
+    } catch (error) {
+      console.error('Failed to load characters:', error);
+    } finally {
+      setIsLoadingCharacters(false);
+    }
+  };
+
+  const handleApplyCharacter = async (character: Character) => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    if (!confirm(`Apply character "${character.character_name || character.character_id}" to all ${records.length} records in "${selectedTableObj.name}"?`)) {
+      return;
+    }
+
+    setApplyingCharacterId(character.character_id);
+
+    try {
+      const response = await fetch('/api/airtable/apply-character', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          characterId: character.character_id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        alert(`Successfully applied character to ${data.updatedCount} records!`);
+        await loadRecords();
+      } else {
+        alert(`Failed to apply character: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to apply character:', error);
+      alert(`Failed to apply character: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setApplyingCharacterId(null);
+    }
   };
 
   // ===== Table Management Handlers =====
@@ -272,6 +362,40 @@ export default function DashboardV2Page() {
       alert(`Failed to delete record: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setDeletingRecordId(null);
+    }
+  };
+
+  const handleStatusChange = async (recordId: string, status: string) => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    setUpdatingStatusRecordId(recordId);
+
+    try {
+      const response = await fetch('/api/airtable/update-record', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          recordId: recordId,
+          fields: { regenerate_status: status },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(prevRecords =>
+          prevRecords.map(r => r.id === data.record.id ? data.record : r)
+        );
+      } else {
+        const data = await response.json();
+        alert(`Failed to update status: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to update status:', error);
+      alert(`Failed to update status: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setUpdatingStatusRecordId(null);
     }
   };
 
@@ -674,20 +798,30 @@ export default function DashboardV2Page() {
       {/* Main Content */}
       <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Left Sidebar - Table Management */}
-          <TableManagement
-            tables={tables}
-            selectedTable={selectedTable}
-            setSelectedTable={setSelectedTable}
-            isLoadingTables={isLoadingTables}
-            newTableName={newTableName}
-            setNewTableName={setNewTableName}
-            isCreatingTable={isCreatingTable}
-            createTableError={createTableError}
-            createTableSuccess={createTableSuccess}
-            onCreateTable={handleCreateTable}
-            onRefreshTables={loadTables}
-          />
+          {/* Left Sidebar - Table Management & Characters */}
+          <div className="lg:col-span-1 space-y-0">
+            <TableManagement
+              tables={tables}
+              selectedTable={selectedTable}
+              setSelectedTable={setSelectedTable}
+              isLoadingTables={isLoadingTables}
+              newTableName={newTableName}
+              setNewTableName={setNewTableName}
+              isCreatingTable={isCreatingTable}
+              createTableError={createTableError}
+              createTableSuccess={createTableSuccess}
+              onCreateTable={handleCreateTable}
+              onRefreshTables={loadTables}
+            />
+            <AvailableCharacters
+              characters={characters}
+              isLoading={isLoadingCharacters}
+              applyingCharacterId={applyingCharacterId}
+              selectedTable={selectedTable}
+              onApplyCharacter={handleApplyCharacter}
+              onRefresh={loadCharacters}
+            />
+          </div>
 
           {/* Right Content Area - Records Display */}
           <div className="lg:col-span-2">
@@ -727,14 +861,24 @@ export default function DashboardV2Page() {
                         Manage Records
                       </button>
                       <button
-                        onClick={() => setActiveTab('generate')}
+                        onClick={() => setActiveTab('prompt_generation')}
                         className={`pb-3 px-2 text-sm font-medium border-b-2 transition-colors ${
-                          activeTab === 'generate'
+                          activeTab === 'prompt_generation'
                             ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
                             : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
                         }`}
                       >
-                        Generate Content
+                        Prompt Generation
+                      </button>
+                      <button
+                        onClick={() => setActiveTab('mass_generation')}
+                        className={`pb-3 px-2 text-sm font-medium border-b-2 transition-colors ${
+                          activeTab === 'mass_generation'
+                            ? 'border-blue-600 text-blue-600 dark:border-blue-400 dark:text-blue-400'
+                            : 'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300'
+                        }`}
+                      >
+                        Mass Generation
                       </button>
                     </div>
                   </div>
@@ -765,30 +909,35 @@ export default function DashboardV2Page() {
                     </>
                   )}
 
-                  {/* Tab Content: Generate Content */}
-                  {activeTab === 'generate' && (
+                  {/* Tab Content: Prompt Generation */}
+                  {activeTab === 'prompt_generation' && (
                     <div className="space-y-4">
                       <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
                           Prompt Generation
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Generate prompts for selected records
+                          Generate prompts for all records based on reference images
                         </p>
                         <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm font-medium">
-                          Generate Prompts
+                          Generate Prompts for All Records
                         </button>
                       </div>
+                    </div>
+                  )}
 
+                  {/* Tab Content: Mass Generation */}
+                  {activeTab === 'mass_generation' && (
+                    <div className="space-y-4">
                       <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                          Image Generation
+                          Mass Image Generation
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Generate images based on prompts
+                          Generate images for all records with prompts
                         </p>
                         <button className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
-                          Generate Images
+                          Generate Images for All Records
                         </button>
                       </div>
                     </div>
@@ -800,9 +949,12 @@ export default function DashboardV2Page() {
                     isLoadingRecords={isLoadingRecords}
                     uploadingRecordId={uploadingRecordId}
                     deletingRecordId={deletingRecordId}
+                    updatingStatusRecordId={updatingStatusRecordId}
+                    characters={characters}
                     onRowClick={handleRowClick}
                     onRowImageUpload={handleRowImageUpload}
                     onDeleteRecord={handleDeleteRecord}
+                    onStatusChange={handleStatusChange}
                   />
                 </div>
               ) : (
@@ -846,6 +998,7 @@ export default function DashboardV2Page() {
           referenceGeneratedImage={referenceGeneratedImage}
           generationError={generationError}
           selectedPromptType={selectedPromptType}
+          characters={characters}
           onClose={handleCloseModal}
           onFieldChange={handleFieldChange}
           onSave={handleSaveRecord}

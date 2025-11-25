@@ -31,8 +31,7 @@ export function TableManagement({
   onRefreshTables,
 }: TableManagementProps) {
   return (
-    <div className="lg:col-span-1">
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
         <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
           Table Management
         </h2>
@@ -119,30 +118,6 @@ export function TableManagement({
           >
             Refresh Tables
           </button>
-        </div>
-      </div>
-
-      {/* Table Schema Info */}
-      <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-          Table Schema
-        </h3>
-        <div className="text-sm text-gray-600 dark:text-gray-400 space-y-2">
-          <p><strong>Created tables include:</strong></p>
-          <ul className="list-disc list-inside space-y-1 ml-2">
-            <li>id (text)</li>
-            <li>reference_image (text)</li>
-            <li>character_id (text)</li>
-            <li>reference_image_attached (file)</li>
-            <li>initial_prompt (long text)</li>
-            <li>restyled_prompt (long text)</li>
-            <li>edit_prompt (long text)</li>
-            <li>regenerate_status (text)</li>
-            <li>image_1 (file)</li>
-            <li>image_2 (file)</li>
-            <li>image_3 (file)</li>
-          </ul>
-        </div>
       </div>
     </div>
   );

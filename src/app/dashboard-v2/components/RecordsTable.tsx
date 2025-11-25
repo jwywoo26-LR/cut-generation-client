@@ -2,15 +2,19 @@
 
 import React from 'react';
 import { AirtableRecord, AirtableAttachment } from '../types';
+import { Character } from './AvailableCharacters';
 
 interface RecordsTableProps {
   records: AirtableRecord[];
   isLoadingRecords: boolean;
   uploadingRecordId: string | null;
   deletingRecordId: string | null;
+  updatingStatusRecordId: string | null;
+  characters: Character[];
   onRowClick: (record: AirtableRecord) => void;
   onRowImageUpload: (recordId: string, file: File) => void;
   onDeleteRecord: (recordId: string) => void;
+  onStatusChange: (recordId: string, status: string) => void;
 }
 
 export function RecordsTable({
@@ -18,10 +22,17 @@ export function RecordsTable({
   isLoadingRecords,
   uploadingRecordId,
   deletingRecordId,
+  updatingStatusRecordId,
+  characters,
   onRowClick,
   onRowImageUpload,
   onDeleteRecord,
+  onStatusChange,
 }: RecordsTableProps) {
+  // Helper function to find character by ID
+  const getCharacterById = (characterId: string): Character | undefined => {
+    return characters.find(c => c.character_id === characterId);
+  };
   if (isLoadingRecords) {
     return (
       <div className="text-center py-12">
@@ -87,9 +98,12 @@ export function RecordsTable({
                 onClick={() => onRowClick(record)}
                 className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer"
               >
-                {/* Character ID */}
+                {/* Character ID with Image */}
                 <td className="px-4 py-4 text-sm text-gray-900 dark:text-white">
-                  {record.fields.character_id as string || '-'}
+                  <CharacterCell
+                    characterId={record.fields.character_id as string}
+                    character={getCharacterById(record.fields.character_id as string)}
+                  />
                 </td>
 
                 {/* Reference Image Preview */}
@@ -102,14 +116,13 @@ export function RecordsTable({
                 </td>
 
                 {/* Status */}
-                <td className="px-4 py-4 text-sm">
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    record.fields.regenerate_status === 'true'
-                      ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
-                      : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200'
-                  }`}>
-                    {(record.fields.regenerate_status as string) || '-'}
-                  </span>
+                <td className="px-4 py-4 text-sm" onClick={(e) => e.stopPropagation()}>
+                  <StatusDropdown
+                    recordId={record.id}
+                    currentStatus={(record.fields.regenerate_status as string) || ''}
+                    isUpdating={updatingStatusRecordId === record.id}
+                    onStatusChange={onStatusChange}
+                  />
                 </td>
 
                 {/* First Generated Image Preview */}
@@ -279,6 +292,93 @@ function GeneratedImageCell({ record }: GeneratedImageCellProps) {
   return (
     <div className="w-16 h-16 bg-gray-100 dark:bg-gray-700 rounded border border-gray-300 dark:border-gray-600 flex items-center justify-center">
       <span className="text-xs text-gray-400">-</span>
+    </div>
+  );
+}
+
+interface StatusDropdownProps {
+  recordId: string;
+  currentStatus: string;
+  isUpdating: boolean;
+  onStatusChange: (recordId: string, status: string) => void;
+}
+
+function StatusDropdown({ recordId, currentStatus, isUpdating, onStatusChange }: StatusDropdownProps) {
+  const getStatusStyle = (status: string) => {
+    switch (status) {
+      case 'true':
+        return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 border-green-300 dark:border-green-700';
+      case 'false':
+        return 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200 border-red-300 dark:border-red-700';
+      default:
+        return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-200 border-gray-300 dark:border-gray-600';
+    }
+  };
+
+  if (isUpdating) {
+    return (
+      <div className="flex items-center gap-1 px-2 py-1 text-xs">
+        <svg className="animate-spin h-3 w-3 text-blue-600" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <span className="text-gray-500">Updating...</span>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      value={currentStatus}
+      onChange={(e) => onStatusChange(recordId, e.target.value)}
+      className={`px-2 py-1 rounded text-xs border cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 ${getStatusStyle(currentStatus)}`}
+    >
+      <option value="">-</option>
+      <option value="true">true</option>
+      <option value="false">false</option>
+    </select>
+  );
+}
+
+interface CharacterCellProps {
+  characterId: string | undefined;
+  character: Character | undefined;
+}
+
+function CharacterCell({ characterId, character }: CharacterCellProps) {
+  if (!characterId) {
+    return <span className="text-gray-400">-</span>;
+  }
+
+  if (character?.character_image) {
+    return (
+      <div className="flex items-center gap-2">
+        <img
+          src={character.character_image}
+          alt={character.character_name || characterId}
+          className="w-10 h-10 object-cover rounded-full border border-gray-300 dark:border-gray-600"
+        />
+        <div className="flex flex-col">
+          <span className="text-xs font-medium truncate max-w-[100px]">
+            {character.character_name || characterId}
+          </span>
+          <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate max-w-[100px]">
+            {characterId}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  // Character ID exists but no matching character found or no image
+  return (
+    <div className="flex items-center gap-2">
+      <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+        <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+        </svg>
+      </div>
+      <span className="text-xs truncate max-w-[100px]">{characterId}</span>
     </div>
   );
 }

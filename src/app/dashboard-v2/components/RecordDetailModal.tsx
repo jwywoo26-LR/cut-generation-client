@@ -1,7 +1,8 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { AirtableRecord, AirtableAttachment, PromptType } from '../types';
+import { Character } from './AvailableCharacters';
 
 interface RecordDetailModalProps {
   selectedRecord: AirtableRecord;
@@ -14,6 +15,7 @@ interface RecordDetailModalProps {
   referenceGeneratedImage: string | null;
   generationError: string;
   selectedPromptType: PromptType;
+  characters: Character[];
   onClose: () => void;
   onFieldChange: (fieldName: string, value: string) => void;
   onSave: () => void;
@@ -36,6 +38,7 @@ export function RecordDetailModal({
   referenceGeneratedImage,
   generationError,
   selectedPromptType,
+  characters,
   onClose,
   onFieldChange,
   onSave,
@@ -92,6 +95,7 @@ export function RecordDetailModal({
               isGeneratingReference={isGeneratingReference}
               generationError={generationError}
               selectedPromptType={selectedPromptType}
+              characters={characters}
               onFieldChange={onFieldChange}
               onGeneratePromptOnly={onGeneratePromptOnly}
               onGenerateWithReference={onGenerateWithReference}
@@ -347,6 +351,7 @@ interface RecordInfoColumnProps {
   isGeneratingReference: boolean;
   generationError: string;
   selectedPromptType: PromptType;
+  characters: Character[];
   onFieldChange: (fieldName: string, value: string) => void;
   onGeneratePromptOnly: () => void;
   onGenerateWithReference: () => void;
@@ -359,24 +364,123 @@ function RecordInfoColumn({
   isGeneratingReference,
   generationError,
   selectedPromptType,
+  characters,
   onFieldChange,
   onGeneratePromptOnly,
   onGenerateWithReference,
   onPromptTypeChange,
 }: RecordInfoColumnProps) {
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const selectedCharacter = characters.find(c => c.character_id === editedFields.character_id);
+
   return (
     <div className="space-y-6">
-      {/* Character ID */}
+      {/* Character ID with Dropdown */}
       <div>
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          Character ID
+          Character
         </label>
-        <input
-          type="text"
-          value={editedFields.character_id || ''}
-          onChange={(e) => onFieldChange('character_id', e.target.value)}
-          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
+        <div className="relative">
+          {/* Selected Character Display / Dropdown Trigger */}
+          <button
+            type="button"
+            onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 text-left flex items-center justify-between"
+          >
+            {selectedCharacter ? (
+              <div className="flex items-center gap-2">
+                {selectedCharacter.character_image ? (
+                  <img
+                    src={selectedCharacter.character_image}
+                    alt={selectedCharacter.character_name}
+                    className="w-8 h-8 object-cover rounded-full border border-gray-300 dark:border-gray-600"
+                  />
+                ) : (
+                  <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                  </div>
+                )}
+                <div className="flex flex-col">
+                  <span className="text-sm font-medium">{selectedCharacter.character_name || 'Unnamed'}</span>
+                  <span className="text-xs text-gray-500 dark:text-gray-400">{selectedCharacter.character_id}</span>
+                </div>
+              </div>
+            ) : editedFields.character_id ? (
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <span className="text-sm">{editedFields.character_id}</span>
+              </div>
+            ) : (
+              <span className="text-gray-400">Select a character...</span>
+            )}
+            <svg className={`w-5 h-5 text-gray-400 transition-transform ${isDropdownOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+
+          {/* Dropdown Menu */}
+          {isDropdownOpen && (
+            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+              {/* Clear option */}
+              <button
+                type="button"
+                onClick={() => {
+                  onFieldChange('character_id', '');
+                  setIsDropdownOpen(false);
+                }}
+                className="w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 text-sm border-b border-gray-200 dark:border-gray-600"
+              >
+                Clear selection
+              </button>
+              {characters.map((character) => (
+                <button
+                  key={character.id}
+                  type="button"
+                  onClick={() => {
+                    onFieldChange('character_id', character.character_id);
+                    setIsDropdownOpen(false);
+                  }}
+                  className={`w-full px-3 py-2 text-left hover:bg-gray-100 dark:hover:bg-gray-600 flex items-center gap-2 ${
+                    editedFields.character_id === character.character_id ? 'bg-blue-50 dark:bg-blue-900/30' : ''
+                  }`}
+                >
+                  {character.character_image ? (
+                    <img
+                      src={character.character_image}
+                      alt={character.character_name}
+                      className="w-10 h-10 object-cover rounded-full border border-gray-300 dark:border-gray-600"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 bg-gray-200 dark:bg-gray-600 rounded-full flex items-center justify-center">
+                      <svg className="w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                    </div>
+                  )}
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white">
+                      {character.character_name || 'Unnamed'}
+                    </span>
+                    <span className="text-xs text-gray-500 dark:text-gray-400">
+                      {character.character_id}
+                    </span>
+                  </div>
+                  {editedFields.character_id === character.character_id && (
+                    <svg className="w-5 h-5 text-blue-600 ml-auto" fill="currentColor" viewBox="0 0 20 20">
+                      <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                    </svg>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Initial Prompt */}
