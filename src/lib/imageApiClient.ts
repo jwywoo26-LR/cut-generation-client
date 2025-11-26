@@ -9,6 +9,7 @@ export interface ImageTaskResponse {
   status?: string;
   image_urls?: string[];
   image_url?: string;
+  result_paths?: string[];
   progress?: number;
   result_s3_url?: string;
   save_s3_url?: string;

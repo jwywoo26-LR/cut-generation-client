@@ -30,7 +30,6 @@ export default function DashboardV2Page() {
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [createTableError, setCreateTableError] = useState('');
   const [createTableSuccess, setCreateTableSuccess] = useState('');
-  const [isDeletingTable, setIsDeletingTable] = useState(false);
 
   // Records state
   const [records, setRecords] = useState<AirtableRecord[]>([]);
@@ -85,6 +84,18 @@ export default function DashboardV2Page() {
   // Style rules state
   const [styleRules, setStyleRules] = useState<StyleRule[]>([]);
 
+  // Miro integration state
+  const [miroBoardId, setMiroBoardId] = useState('');
+  const [miroBoardName, setMiroBoardName] = useState('');
+  const [miroLayout, setMiroLayout] = useState<'grid' | 'table'>('grid');
+  const [isMiroConfigured, setIsMiroConfigured] = useState(false);
+  const [isGeneratingWithMiro, setIsGeneratingWithMiro] = useState(false);
+  const [miroGenerationProgress, setMiroGenerationProgress] = useState<{current: number; total: number} | null>(null);
+  const [miroGenerationError, setMiroGenerationError] = useState('');
+  const [variations, setVariations] = useState(1);
+  const [queueSize, setQueueSize] = useState(5);
+  const [massGenerationPromptType, setMassGenerationPromptType] = useState<'initial_prompt' | 'restyled_prompt' | 'edit_prompt'>('initial_prompt');
+
   // Check if user is already authenticated
   useEffect(() => {
     const authStatus = sessionStorage.getItem('dashboardV2Auth');
@@ -98,8 +109,23 @@ export default function DashboardV2Page() {
     if (isAuthenticated) {
       loadTables();
       loadCharacters();
+      checkMiroConfiguration();
     }
   }, [isAuthenticated]);
+
+  // Check Miro configuration
+  const checkMiroConfiguration = async () => {
+    try {
+      const response = await fetch('/api/miro/upload');
+      if (response.ok) {
+        const data = await response.json();
+        setIsMiroConfigured(data.configured);
+      }
+    } catch (error) {
+      console.error('Failed to check Miro configuration:', error);
+      setIsMiroConfigured(false);
+    }
+  };
 
   // Load records when table is selected
   useEffect(() => {
@@ -370,47 +396,6 @@ export default function DashboardV2Page() {
       setCreateTableError('Failed to create table. Please try again.');
     } finally {
       setIsCreatingTable(false);
-    }
-  };
-
-  const handleDeleteTable = async (tableId: string, tableName: string) => {
-    if (!confirm(`Are you sure you want to delete ALL RECORDS in "${tableName}"?\n\nNote: Airtable doesn't allow table deletion via API. This will clear all records but the table will remain (you can delete it from Airtable's web interface).`)) {
-      return;
-    }
-
-    // Double confirmation for safety
-    if (!confirm(`FINAL WARNING: You are about to permanently delete ALL RECORDS in "${tableName}". This cannot be undone.`)) {
-      return;
-    }
-
-    setIsDeletingTable(true);
-    setCreateTableError('');
-    setCreateTableSuccess('');
-
-    try {
-      const response = await fetch('/api/airtable/delete-table', {
-        method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableId, tableName }),
-      });
-
-      const data = await response.json();
-
-      if (response.ok) {
-        setCreateTableSuccess(data.message || `All records in "${tableName}" deleted successfully!`);
-        // Clear records if the deleted table was selected
-        if (selectedTable === tableId) {
-          setRecords([]);
-        }
-        await loadRecords();
-      } else {
-        setCreateTableError(data.error || 'Failed to delete records');
-      }
-    } catch (error) {
-      console.error('Failed to delete table records:', error);
-      setCreateTableError('Failed to delete records. Please try again.');
-    } finally {
-      setIsDeletingTable(false);
     }
   };
 
@@ -717,6 +702,91 @@ export default function DashboardV2Page() {
     }
   };
 
+  // ===== Miro Generation Handler =====
+  const handleGenerateAndUploadToMiro = async () => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) {
+      setMiroGenerationError('No table selected');
+      return;
+    }
+
+    // Count records ready for generation based on selected prompt type
+    const recordsReadyForGeneration = records.filter(record => {
+      const hasPrompt = record.fields[massGenerationPromptType] &&
+                        String(record.fields[massGenerationPromptType]).trim() !== '';
+      const hasReference = record.fields.reference_image_attached &&
+                          Array.isArray(record.fields.reference_image_attached) &&
+                          (record.fields.reference_image_attached as unknown[]).length > 0;
+      return hasPrompt && hasReference;
+    });
+
+    if (recordsReadyForGeneration.length === 0) {
+      setMiroGenerationError(`No records found ready for generation. Records need ${massGenerationPromptType.replace('_', ' ')} and reference images.`);
+      return;
+    }
+
+    const totalGenerations = recordsReadyForGeneration.length * variations;
+    const hasMiroConfig = isMiroConfigured && (miroBoardId.trim() || miroBoardName.trim());
+    const miroMessage = hasMiroConfig ? ' and upload to Miro' : '';
+
+    if (!confirm(`Generate ${variations} variation(s) for ${recordsReadyForGeneration.length} records (${totalGenerations} total images)${miroMessage}?\n\nThis may take several minutes.`)) {
+      return;
+    }
+
+    setIsGeneratingWithMiro(true);
+    setMiroGenerationError('');
+    setMiroGenerationProgress({ current: 0, total: totalGenerations });
+
+    try {
+      // Build Miro config - use boardId if provided, otherwise boardName to create new board
+      let miroConfigPayload = undefined;
+      if (isMiroConfigured && (miroBoardId.trim() || miroBoardName.trim())) {
+        miroConfigPayload = {
+          boardId: miroBoardId.trim() || undefined,
+          boardName: !miroBoardId.trim() && miroBoardName.trim() ? miroBoardName.trim() : undefined,
+          layout: miroLayout,
+          imageWidth: 300,
+          imageHeight: 450,
+          columns: variations,
+        };
+      }
+
+      const response = await fetch('/api/generate-and-upload-miro', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          variations,
+          queueSize,
+          promptType: massGenerationPromptType,
+          miroConfig: miroConfigPayload,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        let miroInfo = '';
+        if (data.miroEnabled) {
+          miroInfo = `\nUploaded to Miro: ${data.miroUploadCount}`;
+          if (data.miroBoardUrl) {
+            miroInfo += `\nNew board created: ${data.miroBoardUrl}`;
+          }
+        }
+        alert(`Generation complete!\n\nRecords processed: ${data.processedCount}\nTotal generations: ${data.totalGenerations}\nSuccessful: ${data.successCount}${miroInfo}`);
+        await loadRecords();
+      } else {
+        setMiroGenerationError(data.error || 'Failed to generate and upload');
+      }
+    } catch (error) {
+      console.error('Failed to generate and upload to Miro:', error);
+      setMiroGenerationError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsGeneratingWithMiro(false);
+      setMiroGenerationProgress(null);
+    }
+  };
+
   // ===== Image Generation Handlers =====
   const imageUrlToBase64 = async (url: string): Promise<string> => {
     const response = await fetch(url);
@@ -949,8 +1019,6 @@ export default function DashboardV2Page() {
               createTableSuccess={createTableSuccess}
               onCreateTable={handleCreateTable}
               onRefreshTables={loadTables}
-              onDeleteTable={handleDeleteTable}
-              isDeletingTable={isDeletingTable}
             />
             <AvailableCharacters
               characters={characters}
@@ -1166,16 +1234,251 @@ export default function DashboardV2Page() {
                   {/* Tab Content: Mass Generation */}
                   {activeTab === 'mass_generation' && (
                     <div className="space-y-4">
-                      <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                      {/* Generation Settings */}
+                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                          Mass Image Generation
+                          Generation Settings
+                        </h3>
+                        <div className="space-y-4">
+                          {/* Prompt Type Selection */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Prompt Type to Use
+                            </label>
+                            <select
+                              value={massGenerationPromptType}
+                              onChange={(e) => setMassGenerationPromptType(e.target.value as 'initial_prompt' | 'restyled_prompt' | 'edit_prompt')}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                            >
+                              <option value="initial_prompt">Initial Prompt</option>
+                              <option value="restyled_prompt">Restyled Prompt</option>
+                              <option value="edit_prompt">Edit Prompt</option>
+                            </select>
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Select which prompt field to use for image generation
+                            </p>
+                          </div>
+
+                          {/* Variations */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Variations per Record
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="10"
+                              value={variations}
+                              onChange={(e) => setVariations(Math.max(1, Math.min(10, parseInt(e.target.value) || 1)))}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Generate multiple variations (1-10) for each record to compare different outputs
+                            </p>
+                          </div>
+
+                          {/* Queue Size */}
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                              Queue Size (Concurrent Tasks)
+                            </label>
+                            <input
+                              type="number"
+                              min="1"
+                              max="30"
+                              value={queueSize}
+                              onChange={(e) => setQueueSize(Math.max(1, Math.min(30, parseInt(e.target.value) || 5)))}
+                              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-green-500"
+                            />
+                            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                              Number of concurrent generation tasks (1-30). Higher = faster but uses more resources.
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Miro Configuration Section */}
+                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                          Miro Board Configuration
+                        </h3>
+                        <div className="space-y-4">
+                          {/* Miro Status */}
+                          <div className={`p-2 rounded text-sm ${isMiroConfigured ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300' : 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300'}`}>
+                            {isMiroConfigured
+                              ? '✓ Miro integration is configured'
+                              : '⚠ MIRO_TOKEN not set - Miro upload disabled'}
+                          </div>
+
+                          {isMiroConfigured && (
+                            <>
+                              {/* Board Name Input (for creating new board) */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                  New Board Name
+                                </label>
+                                <input
+                                  type="text"
+                                  value={miroBoardName}
+                                  onChange={(e) => {
+                                    setMiroBoardName(e.target.value);
+                                    if (e.target.value.trim()) setMiroBoardId(''); // Clear board ID if setting name
+                                  }}
+                                  placeholder="Enter name to create a new board"
+                                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  disabled={!!miroBoardId.trim()}
+                                />
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                  A new Miro board will be created with this name
+                                </p>
+                              </div>
+
+                              <div className="text-center text-sm text-gray-500 dark:text-gray-400">— or —</div>
+
+                              {/* Board ID Input (for existing board) */}
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                  Existing Board ID
+                                </label>
+                                <input
+                                  type="text"
+                                  value={miroBoardId}
+                                  onChange={(e) => {
+                                    setMiroBoardId(e.target.value);
+                                    if (e.target.value.trim()) setMiroBoardName(''); // Clear name if setting ID
+                                  }}
+                                  placeholder="Enter existing board ID"
+                                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                  disabled={!!miroBoardName.trim()}
+                                />
+                                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                                  Find the board ID in your Miro board URL: miro.com/app/board/<strong>BOARD_ID</strong>/
+                                </p>
+                              </div>
+
+                              {/* Layout Selection */}
+                              {(miroBoardId.trim() || miroBoardName.trim()) && (
+                                <div>
+                                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                                    Layout Style
+                                  </label>
+                                  <div className="flex gap-4">
+                                    <label className="flex items-center">
+                                      <input
+                                        type="radio"
+                                        name="miroLayout"
+                                        value="grid"
+                                        checked={miroLayout === 'grid'}
+                                        onChange={() => setMiroLayout('grid')}
+                                        className="mr-2"
+                                      />
+                                      <span className="text-sm text-gray-700 dark:text-gray-300">Grid</span>
+                                    </label>
+                                    <label className="flex items-center">
+                                      <input
+                                        type="radio"
+                                        name="miroLayout"
+                                        value="table"
+                                        checked={miroLayout === 'table'}
+                                        onChange={() => setMiroLayout('table')}
+                                        className="mr-2"
+                                      />
+                                      <span className="text-sm text-gray-700 dark:text-gray-300">Table (with row labels)</span>
+                                    </label>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Generation Section */}
+                      <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                          Generate Images
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Generate images for all records with prompts
+                          Generate images for all records with prompts. Images are saved to S3{(miroBoardId.trim() || miroBoardName.trim()) ? ' and uploaded to Miro' : ''}.
                         </p>
-                        <button className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium">
-                          Generate Images for All Records
+
+                        {/* Requirements info */}
+                        <div className="mb-4 space-y-2 text-sm text-gray-500 dark:text-gray-400">
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Records need: reference_image_attached + {massGenerationPromptType.replace(/_/g, ' ')}</span>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                            </svg>
+                            <span>Will generate {variations} variation(s) per record</span>
+                          </div>
+                          {miroBoardName.trim() && (
+                            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                              </svg>
+                              <span>Will create new Miro board: &quot;{miroBoardName}&quot;</span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Error display */}
+                        {miroGenerationError && (
+                          <div className="mb-4 p-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded text-sm">
+                            {miroGenerationError}
+                          </div>
+                        )}
+
+                        {/* Progress display */}
+                        {miroGenerationProgress && (
+                          <div className="mb-4 p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-sm">
+                            Processing: {miroGenerationProgress.current} / {miroGenerationProgress.total}
+                          </div>
+                        )}
+
+                        <button
+                          onClick={handleGenerateAndUploadToMiro}
+                          disabled={isGeneratingWithMiro || !selectedTable || (!isMiroConfigured && !(miroBoardId.trim() || miroBoardName.trim()))}
+                          className="w-full px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-md text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          {isGeneratingWithMiro ? (
+                            <>
+                              <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                              </svg>
+                              Generating...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                              </svg>
+                              Generate Images{(miroBoardId.trim() || miroBoardName.trim()) ? ' & Upload to Miro' : ''}
+                            </>
+                          )}
                         </button>
+                      </div>
+
+                      {/* Info Box */}
+                      <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            <p className="font-medium mb-1">How it works:</p>
+                            <p>1. Each record with a prompt and reference image will be processed</p>
+                            <p>2. AI generates {variations} image variation(s) per record</p>
+                            <p>3. Generated images are uploaded to S3 for permanent storage</p>
+                            {(miroBoardId.trim() || miroBoardName.trim()) && <p>4. Images are uploaded to your Miro board for visual review</p>}
+                            <p className="mt-2 text-yellow-600 dark:text-yellow-400">Note: This process may take several minutes depending on the number of records and variations.</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
