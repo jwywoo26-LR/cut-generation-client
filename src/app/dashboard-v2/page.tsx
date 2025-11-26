@@ -10,8 +10,9 @@ import {
   RecordDetailModal,
   ImageViewer,
   AvailableCharacters,
+  StyleRulesConfig,
 } from './components';
-import type { Character } from './components';
+import type { Character, StyleRule } from './components';
 import { AirtableTable, AirtableRecord, AirtableAttachment, TabType, PromptType } from './types';
 
 export default function DashboardV2Page() {
@@ -29,6 +30,7 @@ export default function DashboardV2Page() {
   const [isCreatingTable, setIsCreatingTable] = useState(false);
   const [createTableError, setCreateTableError] = useState('');
   const [createTableSuccess, setCreateTableSuccess] = useState('');
+  const [isDeletingTable, setIsDeletingTable] = useState(false);
 
   // Records state
   const [records, setRecords] = useState<AirtableRecord[]>([]);
@@ -74,6 +76,14 @@ export default function DashboardV2Page() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [isLoadingCharacters, setIsLoadingCharacters] = useState(false);
   const [applyingCharacterId, setApplyingCharacterId] = useState<string | null>(null);
+
+  // Prompt generation state
+  const [isGeneratingInitialPrompts, setIsGeneratingInitialPrompts] = useState(false);
+  const [initialPromptProgress, setInitialPromptProgress] = useState<{ current: number; total: number } | null>(null);
+  const [initialPromptError, setInitialPromptError] = useState<string>('');
+
+  // Style rules state
+  const [styleRules, setStyleRules] = useState<StyleRule[]>([]);
 
   // Check if user is already authenticated
   useEffect(() => {
@@ -215,6 +225,92 @@ export default function DashboardV2Page() {
     }
   };
 
+  // ===== Initial Prompt Generation Handler =====
+  const handleGenerateInitialPrompts = async () => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) {
+      setInitialPromptError('No table selected');
+      return;
+    }
+
+    // Count records that need prompts
+    const recordsNeedingPrompts = records.filter(record => {
+      const hasReference = record.fields.reference_image_attached &&
+                          Array.isArray(record.fields.reference_image_attached) &&
+                          (record.fields.reference_image_attached as unknown[]).length > 0;
+      const hasInitialPrompt = record.fields.initial_prompt &&
+                              String(record.fields.initial_prompt).trim() !== '';
+      return hasReference && !hasInitialPrompt;
+    });
+
+    if (recordsNeedingPrompts.length === 0) {
+      alert('No records found that need initial prompt generation. All records either already have prompts or are missing reference images.');
+      return;
+    }
+
+    const rulesMessage = styleRules.length > 0
+      ? `\n\nStyle rules configured: ${styleRules.length} rule(s) will be applied.`
+      : '\n\nNo style rules configured (default tag generation).';
+
+    if (!confirm(`Generate initial prompts for ${recordsNeedingPrompts.length} records? This will analyze reference images using vision AI.${rulesMessage}`)) {
+      return;
+    }
+
+    setIsGeneratingInitialPrompts(true);
+    setInitialPromptError('');
+    setInitialPromptProgress({ current: 0, total: recordsNeedingPrompts.length });
+
+    // Convert StyleRule[] to API format (remove the 'id' field used for React keys)
+    const apiStyleRules = styleRules.map(rule => {
+      const { id, ...ruleWithoutId } = rule;
+      // Filter out undefined category values
+      const cleanedRule: Record<string, unknown> = {
+        rowStart: ruleWithoutId.rowStart,
+        rowEnd: ruleWithoutId.rowEnd,
+      };
+
+      const categories = ['subject', 'facial_expression', 'clothing', 'nudity', 'angle', 'action', 'objects', 'background'] as const;
+      for (const cat of categories) {
+        if (ruleWithoutId[cat]) {
+          cleanedRule[cat] = ruleWithoutId[cat];
+        }
+      }
+
+      return cleanedRule;
+    });
+
+    try {
+      const response = await fetch('/api/prompt-generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          styleRules: apiStyleRules
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        const successCount = data.results?.filter((r: { status: string }) => r.status === 'success').length || 0;
+        const errorCount = data.results?.filter((r: { status: string }) => r.status === 'error').length || 0;
+
+        alert(`Initial prompt generation complete!\n\nSuccessful: ${successCount}\nFailed: ${errorCount}`);
+        await loadRecords();
+      } else {
+        setInitialPromptError(data.error || 'Failed to generate prompts');
+        alert(`Failed to generate prompts: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to generate initial prompts:', error);
+      setInitialPromptError(error instanceof Error ? error.message : 'Unknown error');
+      alert(`Failed to generate prompts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsGeneratingInitialPrompts(false);
+      setInitialPromptProgress(null);
+    }
+  };
+
   // ===== Table Management Handlers =====
   const loadTables = async () => {
     setIsLoadingTables(true);
@@ -274,6 +370,48 @@ export default function DashboardV2Page() {
       setCreateTableError('Failed to create table. Please try again.');
     } finally {
       setIsCreatingTable(false);
+    }
+  };
+
+  const handleDeleteTable = async (tableId: string, tableName: string) => {
+    if (!confirm(`Are you sure you want to delete the table "${tableName}"?\n\nThis action cannot be undone and will permanently delete all records in this table.`)) {
+      return;
+    }
+
+    // Double confirmation for safety
+    if (!confirm(`FINAL WARNING: You are about to permanently delete "${tableName}" and ALL its data. Type confirmation is not required, but please be absolutely sure.`)) {
+      return;
+    }
+
+    setIsDeletingTable(true);
+    setCreateTableError('');
+    setCreateTableSuccess('');
+
+    try {
+      const response = await fetch('/api/airtable/delete-table', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tableId }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setCreateTableSuccess(`Table "${tableName}" deleted successfully!`);
+        // Clear selection if the deleted table was selected
+        if (selectedTable === tableId) {
+          setSelectedTable('');
+          setRecords([]);
+        }
+        await loadTables();
+      } else {
+        setCreateTableError(data.error || 'Failed to delete table');
+      }
+    } catch (error) {
+      console.error('Failed to delete table:', error);
+      setCreateTableError('Failed to delete table. Please try again.');
+    } finally {
+      setIsDeletingTable(false);
     }
   };
 
@@ -812,6 +950,8 @@ export default function DashboardV2Page() {
               createTableSuccess={createTableSuccess}
               onCreateTable={handleCreateTable}
               onRefreshTables={loadTables}
+              onDeleteTable={handleDeleteTable}
+              isDeletingTable={isDeletingTable}
             />
             <AvailableCharacters
               characters={characters}
@@ -906,22 +1046,120 @@ export default function DashboardV2Page() {
                         onFileSelect={handleFileSelect}
                         onUpload={handleUpload}
                       />
+
+                      {/* Records Display - Only shown in Manage Records tab */}
+                      <RecordsTable
+                        records={records}
+                        isLoadingRecords={isLoadingRecords}
+                        uploadingRecordId={uploadingRecordId}
+                        deletingRecordId={deletingRecordId}
+                        updatingStatusRecordId={updatingStatusRecordId}
+                        characters={characters}
+                        onRowClick={handleRowClick}
+                        onRowImageUpload={handleRowImageUpload}
+                        onDeleteRecord={handleDeleteRecord}
+                        onStatusChange={handleStatusChange}
+                      />
                     </>
                   )}
 
                   {/* Tab Content: Prompt Generation */}
                   {activeTab === 'prompt_generation' && (
-                    <div className="space-y-4">
-                      <div className="p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                    <div className="space-y-6">
+                      {/* Style Rules Configuration */}
+                      <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
                         <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
-                          Prompt Generation
+                          Style Rules Configuration
                         </h3>
                         <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-                          Generate prompts for all records based on reference images
+                          Configure style rules to customize how tags are generated for specific row ranges.
+                          Rules will be applied during initial prompt generation.
                         </p>
-                        <button className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm font-medium">
-                          Generate Prompts for All Records
-                        </button>
+                        <StyleRulesConfig
+                          styleRules={styleRules}
+                          onStyleRulesChange={setStyleRules}
+                          maxRows={records.length || 100}
+                        />
+                      </div>
+
+                      {/* Initial Prompt Generation */}
+                      <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+                          Generate Initial Prompts
+                        </h3>
+                        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+                          Analyze reference images using vision AI to generate structured tags.
+                          Style rules configured above will be applied during generation.
+                          Results are saved to <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">initial_prompt</code> and <code className="px-1 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">applied_style_rules</code> fields.
+                        </p>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            <span>Requires: reference_image_attached</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                            </svg>
+                            <span>Categories: subject, facial_expression, clothing, nudity, angle, action, objects, background</span>
+                          </div>
+                          {styleRules.length > 0 && (
+                            <div className="p-2 bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300 rounded text-xs">
+                              {styleRules.length} style rule(s) will be applied during generation
+                            </div>
+                          )}
+                          {initialPromptError && (
+                            <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded text-xs">
+                              {initialPromptError}
+                            </div>
+                          )}
+                          {initialPromptProgress && (
+                            <div className="p-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded text-xs">
+                              Processing: {initialPromptProgress.current} / {initialPromptProgress.total}
+                            </div>
+                          )}
+                          <button
+                            onClick={handleGenerateInitialPrompts}
+                            disabled={isGeneratingInitialPrompts || !selectedTable}
+                            className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-md text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isGeneratingInitialPrompts ? (
+                              <>
+                                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                </svg>
+                                Generating...
+                              </>
+                            ) : (
+                              <>
+                                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                </svg>
+                                Generate Initial Prompts
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Info Box */}
+                      <div className="p-3 bg-gray-100 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div className="flex items-start gap-2">
+                          <svg className="w-5 h-5 text-gray-500 dark:text-gray-400 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                          <div className="text-xs text-gray-600 dark:text-gray-400">
+                            <p className="font-medium mb-1">Workflow:</p>
+                            <p>1. Upload reference images in Manage Records tab</p>
+                            <p>2. Configure style rules (optional - for customizing tag generation)</p>
+                            <p>3. Generate initial prompts (analyzes images with vision AI + applies rules)</p>
+                            <p>4. Use Mass Generation tab to generate images</p>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   )}
@@ -942,20 +1180,6 @@ export default function DashboardV2Page() {
                       </div>
                     </div>
                   )}
-
-                  {/* Records Display */}
-                  <RecordsTable
-                    records={records}
-                    isLoadingRecords={isLoadingRecords}
-                    uploadingRecordId={uploadingRecordId}
-                    deletingRecordId={deletingRecordId}
-                    updatingStatusRecordId={updatingStatusRecordId}
-                    characters={characters}
-                    onRowClick={handleRowClick}
-                    onRowImageUpload={handleRowImageUpload}
-                    onDeleteRecord={handleDeleteRecord}
-                    onStatusChange={handleStatusChange}
-                  />
                 </div>
               ) : (
                 <div className="text-center py-12">

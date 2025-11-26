@@ -359,6 +359,7 @@ interface RecordInfoColumnProps {
 }
 
 function RecordInfoColumn({
+  selectedRecord,
   editedFields,
   isGeneratingPrompt,
   isGeneratingReference,
@@ -371,7 +372,12 @@ function RecordInfoColumn({
   onPromptTypeChange,
 }: RecordInfoColumnProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isStyleRulesExpanded, setIsStyleRulesExpanded] = useState(false);
   const selectedCharacter = characters.find(c => c.character_id === editedFields.character_id);
+
+  // Parse applied style rules
+  const appliedStyleRules = selectedRecord.fields.applied_style_rules as string | undefined;
+  const hasAppliedRules = appliedStyleRules && appliedStyleRules.trim() !== '';
 
   return (
     <div className="space-y-6">
@@ -495,6 +501,33 @@ function RecordInfoColumn({
           className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
         />
       </div>
+
+      {/* Applied Style Rules (Read-only, collapsible) */}
+      {hasAppliedRules && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setIsStyleRulesExpanded(!isStyleRulesExpanded)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300 mb-2 hover:text-gray-900 dark:hover:text-white"
+          >
+            <svg
+              className={`w-4 h-4 transition-transform ${isStyleRulesExpanded ? 'rotate-90' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            Applied Style Rules
+            <span className="text-xs text-indigo-600 dark:text-indigo-400 font-normal">(click to {isStyleRulesExpanded ? 'collapse' : 'expand'})</span>
+          </button>
+          {isStyleRulesExpanded && (
+            <pre className="w-full px-3 py-2 border border-indigo-200 dark:border-indigo-800 rounded-md bg-indigo-50 dark:bg-indigo-900/20 text-gray-800 dark:text-gray-200 text-xs overflow-x-auto max-h-48 overflow-y-auto">
+              {appliedStyleRules}
+            </pre>
+          )}
+        </div>
+      )}
 
       {/* Restyled Prompt */}
       <div>

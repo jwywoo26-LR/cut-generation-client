@@ -31,6 +31,7 @@ export async function POST(request: Request) {
       { name: 'character_id', type: 'singleLineText' },
       { name: 'reference_image_attached', type: 'multipleAttachments' },
       { name: 'initial_prompt', type: 'multilineText' },
+      { name: 'applied_style_rules', type: 'multilineText' },
       { name: 'restyled_prompt', type: 'multilineText' },
       { name: 'edit_prompt', type: 'multilineText' },
       { name: 'regenerate_status', type: 'singleLineText' },

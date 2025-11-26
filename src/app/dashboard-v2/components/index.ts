@@ -7,3 +7,5 @@ export { RecordDetailModal } from './RecordDetailModal';
 export { ImageViewer } from './ImageViewer';
 export { AvailableCharacters } from './AvailableCharacters';
 export type { Character } from './AvailableCharacters';
+export { StyleRulesConfig } from './StyleRulesConfig';
+export type { StyleRule, CategoryAdjustment } from './StyleRulesConfig';

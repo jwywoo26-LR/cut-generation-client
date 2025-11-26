@@ -9,6 +9,74 @@ interface GrokAPIResponse {
   }>;
 }
 
+interface CategoryAdjustment {
+  recommendations?: string[];
+  removals?: string[];
+  description?: string;
+}
+
+interface StyleRule {
+  rowStart: number;
+  rowEnd: number;
+  subject?: CategoryAdjustment;
+  facial_expression?: CategoryAdjustment;
+  clothing?: CategoryAdjustment;
+  nudity?: CategoryAdjustment;
+  angle?: CategoryAdjustment;
+  action?: CategoryAdjustment;
+  objects?: CategoryAdjustment;
+  background?: CategoryAdjustment;
+}
+
+const CATEGORIES = ['subject', 'facial_expression', 'clothing', 'nudity', 'angle', 'action', 'objects', 'background'] as const;
+
+function buildStyleAwarePrompt(basePrompt: string, styleRules: StyleRule[], rowNumber: number): { prompt: string; appliedRules: StyleRule[] } {
+  // Filter rules that apply to this row
+  const applicableRules = styleRules.filter(
+    rule => rowNumber >= rule.rowStart && rowNumber <= rule.rowEnd
+  );
+
+  if (applicableRules.length === 0) {
+    return { prompt: basePrompt, appliedRules: [] };
+  }
+
+  // Build style adjustment section
+  const styleSection: string[] = [
+    '',
+    '=== STYLE ADJUSTMENTS FOR THIS IMAGE ===',
+    'Apply the following style rules when generating tags:'
+  ];
+
+  for (const rule of applicableRules) {
+    styleSection.push(`\nRule for rows ${rule.rowStart}-${rule.rowEnd}:`);
+
+    for (const category of CATEGORIES) {
+      const categoryRule = rule[category];
+      if (categoryRule) {
+        styleSection.push(`  ${category.toUpperCase()}:`);
+        if (categoryRule.description) {
+          styleSection.push(`    Guidance: ${categoryRule.description}`);
+        }
+        if (categoryRule.recommendations && categoryRule.recommendations.length > 0) {
+          styleSection.push(`    INCLUDE these tags: ${categoryRule.recommendations.join(', ')}`);
+        }
+        if (categoryRule.removals && categoryRule.removals.length > 0) {
+          styleSection.push(`    EXCLUDE/AVOID: ${categoryRule.removals.join(', ')}`);
+        }
+      }
+    }
+  }
+
+  styleSection.push('');
+  styleSection.push('Apply these style adjustments while analyzing the image. The final tag list should reflect both the image content AND these style rules.');
+  styleSection.push('===================================');
+
+  return {
+    prompt: basePrompt + styleSection.join('\n'),
+    appliedRules: applicableRules
+  };
+}
+
 class GrokAPIClient {
   private baseUrl = "https://api.x.ai/v1";
   private apiKey: string;
@@ -119,7 +187,11 @@ class GrokAPIClient {
 
 export async function POST(request: Request) {
   try {
-    const { tableName, recordIds } = await request.json();
+    const { tableName, recordIds, styleRules = [] } = await request.json() as {
+      tableName: string;
+      recordIds?: string[];
+      styleRules?: StyleRule[];
+    };
 
     if (!tableName) {
       return NextResponse.json(
@@ -188,8 +260,21 @@ export async function POST(request: Request) {
       });
     }
 
+    // Sort records by reference_image for consistent row numbering
+    recordsNeedingPrompts.sort((a: { fields: Record<string, unknown> }, b: { fields: Record<string, unknown> }) => {
+      const aName = String(a.fields.reference_image || '');
+      const bName = String(b.fields.reference_image || '');
+      return aName.localeCompare(bName);
+    });
+
+    // Create a map of record IDs to row numbers (1-based)
+    const recordRowMap = new Map<string, number>();
+    recordsNeedingPrompts.forEach((record: { id: string }, index: number) => {
+      recordRowMap.set(record.id, index + 1);
+    });
+
     const results = [];
-    
+
     // First, set status to "initial_request_sent" for all records to prevent duplicates
     for (const record of recordsNeedingPrompts) {
       try {
@@ -235,11 +320,22 @@ export async function POST(request: Request) {
           continue;
         }
 
-        // Generate prompt using Grok API
+        // Get row number for this record
+        const rowNumber = recordRowMap.get(record.id) || 1;
+
+        // Build style-aware prompt if style rules are provided
+        const basePrompt = SYSTEM_PROMPTS[SystemPromptType.TAG_INITIAL_GENERATION];
+        const { prompt: styleAwarePrompt, appliedRules } = buildStyleAwarePrompt(
+          basePrompt,
+          styleRules,
+          rowNumber
+        );
+
+        // Generate prompt using Grok API with style-aware prompt
         const grokResponse = await grokClient.evaluateImagePrompt(
           imageUrl,
-          undefined, // Use default prompt
-          `Reference: ${record.fields.reference_image || ''}` // Add reference context
+          styleAwarePrompt,
+          `Reference: ${record.fields.reference_image || ''}, Row: ${rowNumber}`
         );
 
         // Extract prompt content
@@ -249,15 +345,20 @@ export async function POST(request: Request) {
           initialPrompt = grokResponse.choices[0].message.content;
         }
 
-        // Update the record in Airtable with generated prompt
-        const updatePayload = {
+        // Prepare applied rules as JSON string for storage
+        const appliedStyleRulesJson = appliedRules.length > 0
+          ? JSON.stringify(appliedRules, null, 2)
+          : '';
+
+        // Update the record in Airtable with generated prompt and applied rules
+        const updatePayload: { fields: Record<string, string> } = {
           fields: {
             initial_prompt: initialPrompt,
-            result_status: 'prompt_generated'
+            applied_style_rules: appliedStyleRulesJson,
           }
         };
 
-        const updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+        let updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
           method: 'PATCH',
           headers: {
             'Authorization': `Bearer ${apiKey}`,
@@ -266,14 +367,44 @@ export async function POST(request: Request) {
           body: JSON.stringify(updatePayload)
         });
 
+        // If update fails, try without applied_style_rules (field might not exist in older tables)
         if (!updateResponse.ok) {
-          throw new Error(`Failed to update record ${record.id}`);
+          const errorText = await updateResponse.text();
+          console.error(`Airtable update error for record ${record.id}:`, errorText);
+
+          // Retry without applied_style_rules field
+          if (errorText.includes('applied_style_rules') || errorText.includes('UNKNOWN_FIELD_NAME')) {
+            console.log(`Retrying update without applied_style_rules for record ${record.id}`);
+            const fallbackPayload = {
+              fields: {
+                initial_prompt: initialPrompt,
+              }
+            };
+
+            updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+              method: 'PATCH',
+              headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify(fallbackPayload)
+            });
+
+            if (!updateResponse.ok) {
+              const fallbackError = await updateResponse.text();
+              throw new Error(`Failed to update record ${record.id}: ${fallbackError}`);
+            }
+          } else {
+            throw new Error(`Failed to update record ${record.id}: ${errorText}`);
+          }
         }
 
         results.push({
           recordId: record.id,
+          rowNumber,
           status: 'success',
-          initialPrompt
+          initialPrompt,
+          appliedRulesCount: appliedRules.length
         });
 
       } catch (error) {
