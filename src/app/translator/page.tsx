@@ -175,6 +175,17 @@ export default function TranslatorPage() {
     }
   };
 
+  // Update a single record locally without refetching all records
+  const updateRecordLocally = (recordId: string, updatedFields: Record<string, unknown>) => {
+    setRecords(prevRecords =>
+      prevRecords.map(record =>
+        record.id === recordId
+          ? { ...record, fields: { ...record.fields, ...updatedFields } }
+          : record
+      )
+    );
+  };
+
   // Show login screen if not authenticated
   if (!isAuthenticated) {
     return (
@@ -274,6 +285,7 @@ export default function TranslatorPage() {
           filteredPersonas={filteredPersonas}
           isLoadingRecords={isLoadingRecords}
           onRecordsUpdated={loadRecords}
+          onRecordUpdatedLocally={updateRecordLocally}
         />
       </div>
     </div>

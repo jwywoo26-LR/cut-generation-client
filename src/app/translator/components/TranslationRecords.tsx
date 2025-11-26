@@ -14,6 +14,7 @@ interface TranslationRecordsProps {
   filteredPersonas: AirtableRecord[];
   isLoadingRecords: boolean;
   onRecordsUpdated: () => void;
+  onRecordUpdatedLocally: (recordId: string, updatedFields: Record<string, unknown>) => void;
 }
 
 export default function TranslationRecords({
@@ -23,6 +24,7 @@ export default function TranslationRecords({
   filteredPersonas,
   isLoadingRecords,
   onRecordsUpdated,
+  onRecordUpdatedLocally,
 }: TranslationRecordsProps) {
   const [isTranslating, setIsTranslating] = useState(false);
   const [translationError, setTranslationError] = useState('');
@@ -84,11 +86,14 @@ export default function TranslationRecords({
     style: 'formal' | 'friendly' | 'casual' | 'narrative',
     characterName: string
   ): Promise<string> => {
-    // Find the persona for the character
-    const personaRecord = filteredPersonas.find(
-      p => String(p.fields.character_name || '') === characterName
-    );
-    const persona = personaRecord ? String(personaRecord.fields.persona || '') : '';
+    // Only look for persona if character name is provided
+    let persona = '';
+    if (characterName && characterName.trim()) {
+      const personaRecord = filteredPersonas.find(
+        p => String(p.fields.character_name || '') === characterName
+      );
+      persona = personaRecord ? String(personaRecord.fields.persona || '') : '';
+    }
 
     const response = await fetch('/api/translate', {
       method: 'POST',
@@ -140,14 +145,20 @@ export default function TranslationRecords({
       try {
         setBatchTranslationProgress(`Translating record ${i + 1}/${recordsToTranslate.length}...`);
 
-        // Translate sequentially to avoid rate limits (10 requests/min for gemini-2.0-flash-exp)
-        // Each translation adds ~6-7 seconds delay with retries, staying under 10/min
-        const translations = [
-          await translateText(koreanText, 'formal', characterName),
-          await translateText(koreanText, 'friendly', characterName),
-          await translateText(koreanText, 'casual', characterName),
-          await translateText(koreanText, 'narrative', characterName)
-        ];
+        // Translate sequentially with delays to avoid rate limits (10 requests/min for gemini-2.0-flash-exp)
+        // Add 7-second delay between each API call to stay under 10 requests/min
+        const translations = [];
+
+        translations.push(await translateText(koreanText, 'formal', characterName));
+        await new Promise(resolve => setTimeout(resolve, 7000)); // 7 second delay
+
+        translations.push(await translateText(koreanText, 'friendly', characterName));
+        await new Promise(resolve => setTimeout(resolve, 7000)); // 7 second delay
+
+        translations.push(await translateText(koreanText, 'casual', characterName));
+        await new Promise(resolve => setTimeout(resolve, 7000)); // 7 second delay
+
+        translations.push(await translateText(koreanText, 'narrative', characterName));
 
         const response = await fetch('/api/airtable/update-record', {
           method: 'POST',
@@ -210,6 +221,11 @@ export default function TranslationRecords({
       });
 
       if (response.ok) {
+        // Update locally without refetching all records
+        onRecordUpdatedLocally(recordId, {
+          kor: editingKoreanText,
+          regenerate_status: 'true'
+        });
         setEditingKoreanId(null);
         setEditingKoreanText('');
       } else {
@@ -240,6 +256,10 @@ export default function TranslationRecords({
       });
 
       if (response.ok) {
+        // Update locally without refetching all records
+        onRecordUpdatedLocally(recordId, {
+          character_name: editingCharacterName
+        });
         setEditingCharacterId(null);
         setEditingCharacterName('');
       } else {
@@ -267,7 +287,10 @@ export default function TranslationRecords({
       });
 
       if (response.ok) {
-        // Success - no need to refresh, changes are already visible
+        // Update locally without refetching all records
+        onRecordUpdatedLocally(recordId, {
+          regenerate_status: newStatus
+        });
       } else {
         console.error('Failed to update regenerate status');
       }

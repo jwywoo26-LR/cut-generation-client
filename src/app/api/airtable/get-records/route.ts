@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+export async function GET(request: Request) {
   try {
-    const { tableName } = await request.json();
+    const { searchParams } = new URL(request.url);
+    const tableName = searchParams.get('tableName');
 
     if (!tableName) {
       return NextResponse.json({ error: 'Table name is required' }, { status: 400 });
@@ -20,9 +21,9 @@ export async function POST(request: Request) {
 
     const encodedTableName = encodeURIComponent(tableName);
 
-    // Fetch records from the table
+    // Fetch records from the table - sort by id ascending (newest at bottom)
     const response = await fetch(
-      `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
+      `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}?sort%5B0%5D%5Bfield%5D=id&sort%5B0%5D%5Bdirection%5D=asc`,
       {
         method: 'GET',
         headers: {
