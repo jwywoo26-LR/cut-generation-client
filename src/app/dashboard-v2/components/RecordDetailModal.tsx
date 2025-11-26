@@ -85,7 +85,7 @@ export function RecordDetailModal({
             />
 
             {/* Middle Column - Reference + Existing Generated Images */}
-            <ReferenceAndStoredImagesColumn selectedRecord={selectedRecord} />
+            <ReferenceAndStoredImagesColumn selectedRecord={selectedRecord} onExpandImage={onExpandImage} />
 
             {/* Right Column - Record Information */}
             <RecordInfoColumn
@@ -277,12 +277,17 @@ function ImageWithExpand({ imageUrl, alt, onExpand }: ImageWithExpandProps) {
 
 interface ReferenceAndStoredImagesColumnProps {
   selectedRecord: AirtableRecord;
+  onExpandImage: (imageUrl: string) => void;
 }
 
-function ReferenceAndStoredImagesColumn({ selectedRecord }: ReferenceAndStoredImagesColumnProps) {
+function ReferenceAndStoredImagesColumn({ selectedRecord, onExpandImage }: ReferenceAndStoredImagesColumnProps) {
   const hasReferenceImage = selectedRecord.fields.reference_image_attached &&
     Array.isArray(selectedRecord.fields.reference_image_attached) &&
     selectedRecord.fields.reference_image_attached.length > 0;
+
+  const referenceImageUrl = hasReferenceImage
+    ? (selectedRecord.fields.reference_image_attached as AirtableAttachment[])[0]?.url
+    : null;
 
   return (
     <div className="space-y-6">
@@ -291,13 +296,24 @@ function ReferenceAndStoredImagesColumn({ selectedRecord }: ReferenceAndStoredIm
         <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
           Reference Image
         </label>
-        {hasReferenceImage ? (
+        {hasReferenceImage && referenceImageUrl ? (
           <div>
-            <img
-              src={(selectedRecord.fields.reference_image_attached as AirtableAttachment[])[0]?.url}
-              alt="Reference"
-              className="w-full rounded-lg border border-gray-300 dark:border-gray-600"
-            />
+            <div className="relative group">
+              <img
+                src={referenceImageUrl}
+                alt="Reference"
+                className="w-full rounded-lg border border-gray-300 dark:border-gray-600"
+              />
+              <button
+                onClick={() => onExpandImage(referenceImageUrl)}
+                className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-2 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                title="Expand image"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                </svg>
+              </button>
+            </div>
             <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
               {selectedRecord.fields.reference_image as string}
             </p>
@@ -318,14 +334,26 @@ function ReferenceAndStoredImagesColumn({ selectedRecord }: ReferenceAndStoredIm
           {[1, 2, 3].map((num) => {
             const imageField = selectedRecord.fields[`image_${num}`];
             if (imageField && Array.isArray(imageField) && imageField.length > 0) {
+              const imageUrl = (imageField[0] as AirtableAttachment)?.url;
               return (
                 <div key={num} className="space-y-1">
                   <p className="text-xs font-medium text-gray-600 dark:text-gray-400 text-center">#{num}</p>
-                  <img
-                    src={(imageField[0] as AirtableAttachment)?.url}
-                    alt={`Generated ${num}`}
-                    className="w-full h-48 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
-                  />
+                  <div className="relative group">
+                    <img
+                      src={imageUrl}
+                      alt={`Generated ${num}`}
+                      className="w-full h-48 object-cover rounded-lg border border-gray-300 dark:border-gray-600"
+                    />
+                    <button
+                      onClick={() => onExpandImage(imageUrl)}
+                      className="absolute top-2 right-2 bg-black/50 hover:bg-black/70 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                      title="Expand image"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                      </svg>
+                    </button>
+                  </div>
                 </div>
               );
             }
