@@ -374,12 +374,12 @@ export default function DashboardV2Page() {
   };
 
   const handleDeleteTable = async (tableId: string, tableName: string) => {
-    if (!confirm(`Are you sure you want to delete the table "${tableName}"?\n\nThis action cannot be undone and will permanently delete all records in this table.`)) {
+    if (!confirm(`Are you sure you want to delete ALL RECORDS in "${tableName}"?\n\nNote: Airtable doesn't allow table deletion via API. This will clear all records but the table will remain (you can delete it from Airtable's web interface).`)) {
       return;
     }
 
     // Double confirmation for safety
-    if (!confirm(`FINAL WARNING: You are about to permanently delete "${tableName}" and ALL its data. Type confirmation is not required, but please be absolutely sure.`)) {
+    if (!confirm(`FINAL WARNING: You are about to permanently delete ALL RECORDS in "${tableName}". This cannot be undone.`)) {
       return;
     }
 
@@ -391,25 +391,24 @@ export default function DashboardV2Page() {
       const response = await fetch('/api/airtable/delete-table', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tableId }),
+        body: JSON.stringify({ tableId, tableName }),
       });
 
       const data = await response.json();
 
       if (response.ok) {
-        setCreateTableSuccess(`Table "${tableName}" deleted successfully!`);
-        // Clear selection if the deleted table was selected
+        setCreateTableSuccess(data.message || `All records in "${tableName}" deleted successfully!`);
+        // Clear records if the deleted table was selected
         if (selectedTable === tableId) {
-          setSelectedTable('');
           setRecords([]);
         }
-        await loadTables();
+        await loadRecords();
       } else {
-        setCreateTableError(data.error || 'Failed to delete table');
+        setCreateTableError(data.error || 'Failed to delete records');
       }
     } catch (error) {
-      console.error('Failed to delete table:', error);
-      setCreateTableError('Failed to delete table. Please try again.');
+      console.error('Failed to delete table records:', error);
+      setCreateTableError('Failed to delete records. Please try again.');
     } finally {
       setIsDeletingTable(false);
     }
