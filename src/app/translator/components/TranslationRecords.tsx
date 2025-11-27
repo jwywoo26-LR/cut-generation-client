@@ -161,7 +161,7 @@ export default function TranslationRecords({
         translations.push(await translateText(koreanText, 'narrative', characterName));
 
         const response = await fetch('/api/airtable/update-record', {
-          method: 'POST',
+          method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             tableName: selectedTable,
@@ -208,7 +208,7 @@ export default function TranslationRecords({
   const handleSaveKorean = async (recordId: string) => {
     try {
       const response = await fetch('/api/airtable/update-record', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableName: selectedTable,
@@ -244,7 +244,7 @@ export default function TranslationRecords({
   const handleSaveCharacter = async (recordId: string) => {
     try {
       const response = await fetch('/api/airtable/update-record', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableName: selectedTable,
@@ -275,7 +275,7 @@ export default function TranslationRecords({
 
     try {
       const response = await fetch('/api/airtable/update-record', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableName: selectedTable,

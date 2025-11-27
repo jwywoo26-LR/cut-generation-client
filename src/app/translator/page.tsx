@@ -164,7 +164,11 @@ export default function TranslatorPage() {
       const data = await response.json();
 
       if (response.ok) {
-        setRecords(data.records || []);
+        // Sort records by createdTime in ascending order (oldest to latest)
+        const sortedRecords = (data.records || []).sort((a: AirtableRecord, b: AirtableRecord) => {
+          return new Date(a.createdTime).getTime() - new Date(b.createdTime).getTime();
+        });
+        setRecords(sortedRecords);
       } else {
         console.error('Failed to load records:', data);
       }
