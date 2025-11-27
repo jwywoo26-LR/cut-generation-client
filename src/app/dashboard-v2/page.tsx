@@ -682,7 +682,7 @@ export default function DashboardV2Page() {
 
     try {
       const response = await fetch('/api/airtable/update-record', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableName: selectedTableObj.name,
@@ -697,9 +697,13 @@ export default function DashboardV2Page() {
         setRecords(prevRecords =>
           prevRecords.map(r => r.id === data.record.id ? data.record : r)
         );
+      } else {
+        const errorData = await response.json();
+        alert(`Failed to save record: ${errorData.error || 'Unknown error'}`);
       }
     } catch (error) {
       console.error('Failed to save record:', error);
+      alert(`Failed to save record: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setIsSavingRecord(false);
     }

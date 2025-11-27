@@ -10,15 +10,20 @@ export async function DELETE(request: Request) {
     // If not in query params, try to get from request body
     if (!tableName || !recordId) {
       try {
-        const body = await request.json();
-        tableName = body.tableName || tableName;
-        recordId = body.recordId || recordId;
+        const contentType = request.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const body = await request.json();
+          tableName = body.tableName || tableName;
+          recordId = body.recordId || recordId;
+        }
       } catch (e) {
         // Body parsing failed, continue with query params
+        console.error('Failed to parse request body:', e);
       }
     }
 
     if (!tableName || !recordId) {
+      console.error('Missing parameters - tableName:', tableName, 'recordId:', recordId);
       return NextResponse.json(
         { error: 'Table name and record ID are required' },
         { status: 400 }

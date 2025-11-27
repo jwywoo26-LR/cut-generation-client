@@ -4,9 +4,9 @@ export async function POST(request: Request) {
   try {
     const { tableName, fields, imageUrl } = await request.json();
 
-    if (!tableName || !fields) {
+    if (!tableName) {
       return NextResponse.json(
-        { error: 'Table name and fields are required' },
+        { error: 'Table name is required' },
         { status: 400 }
       );
     }
@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     console.log(`Creating record in table: ${tableName}`);
 
     // Check if filename already exists in the table
-    if (fields.filename) {
+    if (fields && fields.filename) {
       const checkResponse = await fetch(
         `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}?filterByFormula=${encodeURIComponent(`{filename}="${fields.filename}"`)}`,
         {
@@ -51,7 +51,13 @@ export async function POST(request: Request) {
     }
 
     // Prepare fields with image attachment if provided
-    const recordFields = { ...fields };
+    const recordFields = { ...(fields || {}) };
+
+    // Generate an 'id' field if not provided (timestamp-based unique ID)
+    if (!recordFields.id) {
+      recordFields.id = `record_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+    }
+
     if (imageUrl) {
       recordFields.image_attachment = [{ url: imageUrl }];
     }
@@ -86,12 +92,12 @@ export async function POST(request: Request) {
     console.log(`Checking if should create sound_effect record: tableName=${tableName}, imageUrl=${!!imageUrl}`);
 
     if ((tableName === 'moaning' || tableName === 'moaning_text') && imageUrl) {
-      console.log('Creating corresponding sound_effect record with filename:', fields.filename);
+      console.log('Creating corresponding sound_effect record with filename:', fields?.filename);
 
       try {
         const soundEffectPayload = {
           fields: {
-            filename: fields.filename,
+            filename: fields?.filename,
             image_attachment: [{ url: imageUrl }],
           },
         };
