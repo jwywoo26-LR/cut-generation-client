@@ -21,9 +21,11 @@ export async function GET(request: Request) {
 
     const encodedTableName = encodeURIComponent(tableName);
 
-    // Fetch records from the table - sort by id ascending (newest at bottom)
+    console.log(`Fetching records from table: ${tableName} (base: ${airtableBaseId})`);
+
+    // Fetch records from the table - no sorting to avoid field errors
     const response = await fetch(
-      `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}?sort%5B0%5D%5Bfield%5D=id&sort%5B0%5D%5Bdirection%5D=asc`,
+      `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}`,
       {
         method: 'GET',
         headers: {

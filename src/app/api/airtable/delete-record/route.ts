@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server';
 
 export async function DELETE(request: Request) {
   try {
-    const { tableName, recordId } = await request.json();
+    const { searchParams } = new URL(request.url);
+    const tableName = searchParams.get('tableName');
+    const recordId = searchParams.get('recordId');
 
-    if (!tableName) {
-      return NextResponse.json({ error: 'Table name is required' }, { status: 400 });
-    }
-
-    if (!recordId) {
-      return NextResponse.json({ error: 'Record ID is required' }, { status: 400 });
+    if (!tableName || !recordId) {
+      return NextResponse.json(
+        { error: 'Table name and record ID are required' },
+        { status: 400 }
+      );
     }
 
     const airtableApiKey = process.env.AIRTABLE_API_KEY;
@@ -24,6 +25,8 @@ export async function DELETE(request: Request) {
 
     const encodedTableName = encodeURIComponent(tableName);
 
+    console.log(`Deleting record ${recordId} from table: ${tableName}`);
+
     const response = await fetch(
       `https://api.airtable.com/v0/${airtableBaseId}/${encodedTableName}/${recordId}`,
       {
@@ -36,7 +39,7 @@ export async function DELETE(request: Request) {
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Failed to delete record:', errorText);
+      console.error('Airtable API error:', response.status, errorText);
       return NextResponse.json(
         {
           error: 'Failed to delete record',
@@ -50,7 +53,6 @@ export async function DELETE(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: 'Record deleted successfully',
       deleted: result.deleted,
       id: result.id,
     });
