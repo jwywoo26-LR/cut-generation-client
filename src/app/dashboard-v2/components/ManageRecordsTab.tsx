@@ -26,6 +26,7 @@ interface ManageRecordsTabProps {
   onAddNewRecord: () => void;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onUpload: () => void;
+  onClearFiles: () => void;
   onRowClick: (record: AirtableRecord) => void;
   onRowImageUpload: (recordId: string, file: File) => void;
   onDeleteRecord: (recordId: string) => void;
@@ -47,6 +48,7 @@ export function ManageRecordsTab({
   onAddNewRecord,
   onFileSelect,
   onUpload,
+  onClearFiles,
   onRowClick,
   onRowImageUpload,
   onDeleteRecord,
@@ -73,6 +75,7 @@ export function ManageRecordsTab({
         uploadSuccess={uploadSuccess}
         onFileSelect={onFileSelect}
         onUpload={onUpload}
+        onClearFiles={onClearFiles}
       />
 
       {/* Records Display */}

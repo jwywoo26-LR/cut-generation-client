@@ -9,6 +9,7 @@ interface UploadSectionProps {
   uploadSuccess: string;
   onFileSelect: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onUpload: () => void;
+  onClearFiles: () => void;
 }
 
 export function UploadSection({
@@ -18,6 +19,7 @@ export function UploadSection({
   uploadSuccess,
   onFileSelect,
   onUpload,
+  onClearFiles,
 }: UploadSectionProps) {
   return (
     <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600">
@@ -63,24 +65,38 @@ export function UploadSection({
           )}
         </div>
 
-        <button
-          onClick={onUpload}
-          disabled={isUploading || selectedFiles.length === 0}
-          className={`w-full py-2 px-4 rounded-md text-white font-medium ${
-            isUploading || selectedFiles.length === 0
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700'
-          }`}
-        >
-          {isUploading ? (
-            <div className="flex items-center justify-center">
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Uploading...
-            </div>
-          ) : (
-            `Upload ${selectedFiles.length} file(s)`
-          )}
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={onUpload}
+            disabled={isUploading || selectedFiles.length === 0}
+            className={`flex-1 py-2 px-4 rounded-md text-white font-medium ${
+              isUploading || selectedFiles.length === 0
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-green-600 hover:bg-green-700'
+            }`}
+          >
+            {isUploading ? (
+              <div className="flex items-center justify-center">
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Uploading...
+              </div>
+            ) : (
+              `Upload ${selectedFiles.length} file(s)`
+            )}
+          </button>
+
+          <button
+            onClick={onClearFiles}
+            disabled={isUploading || selectedFiles.length === 0}
+            className={`py-2 px-4 rounded-md font-medium ${
+              isUploading || selectedFiles.length === 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed dark:bg-gray-600 dark:text-gray-400'
+                : 'bg-red-100 text-red-700 hover:bg-red-200 dark:bg-red-900/30 dark:text-red-300 dark:hover:bg-red-900/50'
+            }`}
+          >
+            Clear
+          </button>
+        </div>
 
         {uploadError && (
           <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md p-3">

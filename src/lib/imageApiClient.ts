@@ -189,7 +189,24 @@ export class ImageAPIClient {
         throw new Error(`Status check failed: ${response.status} - ${errorText}`);
       }
 
-      const result = await response.json();
+      // Check if response has content
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error(`Expected JSON response but got: ${text.substring(0, 200)}`);
+      }
+
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        throw new Error(`Empty response body from AI API for task ${synthId}`);
+      }
+
+      let result;
+      try {
+        result = JSON.parse(text);
+      } catch (parseError) {
+        throw new Error(`Failed to parse JSON response: ${text.substring(0, 200)}`);
+      }
 
       // Debug: print full response for first completed task
       if (result.status === 'completed' && !this.debugPrinted) {

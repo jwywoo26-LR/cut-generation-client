@@ -518,7 +518,7 @@ export default function DashboardV2Page() {
 
     try {
       const response = await fetch('/api/airtable/update-record', {
-        method: 'POST',
+        method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableName: selectedTableObj.name,
@@ -566,6 +566,12 @@ export default function DashboardV2Page() {
     }
 
     setSelectedFiles(validFiles);
+    setUploadError('');
+    setUploadSuccess('');
+  };
+
+  const handleClearFiles = () => {
+    setSelectedFiles([]);
     setUploadError('');
     setUploadSuccess('');
   };
@@ -1462,6 +1468,7 @@ export default function DashboardV2Page() {
                       onAddNewRecord={handleAddNewRecord}
                       onFileSelect={handleFileSelect}
                       onUpload={handleUpload}
+                      onClearFiles={handleClearFiles}
                       onRowClick={handleRowClick}
                       onRowImageUpload={handleRowImageUpload}
                       onDeleteRecord={handleDeleteRecord}
