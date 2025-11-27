@@ -964,43 +964,64 @@ export default function DashboardV2Page() {
 
       const decoder = new TextDecoder();
       let buffer = '';
+      let lastProgressTime = Date.now();
+      const CONNECTION_TIMEOUT = 60000; // 60 seconds without updates = connection lost
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      // Monitor connection health
+      const connectionMonitor = setInterval(() => {
+        const timeSinceLastProgress = Date.now() - lastProgressTime;
+        if (timeSinceLastProgress > CONNECTION_TIMEOUT) {
+          console.warn('⚠️ No updates for 60 seconds - connection may be lost');
+          setDraftGenerationError('Connection lost. Generation may still be running on server. Check records and refresh.');
+          clearInterval(connectionMonitor);
+          reader.cancel();
+        }
+      }, 10000); // Check every 10 seconds
 
-        buffer += decoder.decode(value, { stream: true });
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        // Parse SSE events
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || ''; // Keep incomplete line in buffer
+          buffer += decoder.decode(value, { stream: true });
+          lastProgressTime = Date.now(); // Update last activity time
 
-        for (let i = 0; i < lines.length; i++) {
-          const line = lines[i];
-          if (line.startsWith('event: ')) {
-            const eventType = line.slice(7);
-            const dataLine = lines[i + 1];
-            if (dataLine && dataLine.startsWith('data: ')) {
-              try {
-                const data = JSON.parse(dataLine.slice(6));
+          // Parse SSE events
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || ''; // Keep incomplete line in buffer
 
-                if (eventType === 'progress') {
-                  setDraftGenerationProgress({ current: data.current, total: data.total });
-                } else if (eventType === 'record_updated') {
-                  console.log(`✅ Record ${data.recordIndex + 1} updated:`, data.recordId);
-                } else if (eventType === 'complete') {
-                  alert(`Draft generation complete!\n\nRecords processed: ${data.processedCount}\nTotal generations: ${data.totalGenerations}\nSuccessful: ${data.successCount}\nAirtable updates: ${data.updateSuccessCount} success, ${data.updateErrorCount} errors`);
-                  await loadRecords();
-                } else if (eventType === 'error') {
-                  setDraftGenerationError(data.error || 'Failed to generate draft images');
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('event: ')) {
+              const eventType = line.slice(7);
+              const dataLine = lines[i + 1];
+              if (dataLine && dataLine.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(dataLine.slice(6));
+
+                  if (eventType === 'heartbeat') {
+                    // Keep-alive heartbeat - just log it
+                    console.log(`💓 Heartbeat: ${data.activeTasks} active, ${data.queueRemaining} queued`);
+                  } else if (eventType === 'progress') {
+                    setDraftGenerationProgress({ current: data.current, total: data.total });
+                  } else if (eventType === 'record_updated') {
+                    console.log(`✅ Record ${data.recordIndex + 1} updated:`, data.recordId);
+                  } else if (eventType === 'complete') {
+                    alert(`Draft generation complete!\n\nRecords processed: ${data.processedCount}\nTotal generations: ${data.totalGenerations}\nSuccessful: ${data.successCount}\nAirtable updates: ${data.updateSuccessCount} success, ${data.updateErrorCount} errors`);
+                    await loadRecords();
+                  } else if (eventType === 'error') {
+                    setDraftGenerationError(data.error || 'Failed to generate draft images');
+                  }
+                } catch (parseError) {
+                  console.error('Failed to parse SSE event:', parseError);
                 }
-              } catch {
-                // Skip invalid JSON
+                i++; // Skip the data line we just processed
               }
-              i++; // Skip the data line we just processed
             }
           }
         }
+      } finally {
+        clearInterval(connectionMonitor);
       }
     } catch (error) {
       console.error('Failed to generate draft images:', error);

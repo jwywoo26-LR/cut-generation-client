@@ -468,6 +468,13 @@ export async function POST(request: Request) {
         while (activeTasks.size > 0) {
           await new Promise((resolve) => setTimeout(resolve, statusCheckInterval));
 
+          // Send heartbeat to keep connection alive
+          sendEvent('heartbeat', {
+            timestamp: Date.now(),
+            activeTasks: activeTasks.size,
+            queueRemaining: taskQueue.length
+          });
+
           const completedInRound: string[] = [];
 
           // Check status of all active tasks
