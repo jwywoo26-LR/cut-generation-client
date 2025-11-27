@@ -972,9 +972,15 @@ export default function DashboardV2Page() {
         const timeSinceLastProgress = Date.now() - lastProgressTime;
         if (timeSinceLastProgress > CONNECTION_TIMEOUT) {
           console.warn('⚠️ No updates for 60 seconds - connection may be lost');
-          setDraftGenerationError('Connection lost. Generation may still be running on server. Check records and refresh.');
+          setDraftGenerationError('⚠️ Live updates paused. Generation is still running on server! Refresh the page to see progress.');
           clearInterval(connectionMonitor);
           reader.cancel();
+          // Auto-reload records every 10 seconds to show progress
+          const autoRefresh = setInterval(async () => {
+            await loadRecords();
+          }, 10000);
+          // Store interval ID to clear it later if needed
+          (window as any).draftAutoRefresh = autoRefresh;
         }
       }, 10000); // Check every 10 seconds
 
