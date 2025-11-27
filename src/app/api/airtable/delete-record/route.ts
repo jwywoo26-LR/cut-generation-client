@@ -2,9 +2,21 @@ import { NextResponse } from 'next/server';
 
 export async function DELETE(request: Request) {
   try {
+    // Try to get parameters from query string first
     const { searchParams } = new URL(request.url);
-    const tableName = searchParams.get('tableName');
-    const recordId = searchParams.get('recordId');
+    let tableName = searchParams.get('tableName');
+    let recordId = searchParams.get('recordId');
+
+    // If not in query params, try to get from request body
+    if (!tableName || !recordId) {
+      try {
+        const body = await request.json();
+        tableName = body.tableName || tableName;
+        recordId = body.recordId || recordId;
+      } catch (e) {
+        // Body parsing failed, continue with query params
+      }
+    }
 
     if (!tableName || !recordId) {
       return NextResponse.json(
