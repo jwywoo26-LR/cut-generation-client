@@ -433,12 +433,16 @@ export default function DashboardV2Page() {
 
       if (response.ok) {
         const data = await response.json();
+        console.log(`📊 Loaded ${data.records?.length || 0} records from Airtable`);
         const sortedRecords = (data.records || []).sort((a: AirtableRecord, b: AirtableRecord) => {
           const aName = (a.fields.reference_image as string) || '';
           const bName = (b.fields.reference_image as string) || '';
           return aName.localeCompare(bName);
         });
         setRecords(sortedRecords);
+      } else {
+        const errorData = await response.json();
+        console.error('Failed to fetch records:', errorData);
       }
     } catch (error) {
       console.error('Failed to load records:', error);
