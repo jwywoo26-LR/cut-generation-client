@@ -991,7 +991,7 @@ export default function DashboardV2Page() {
             await loadRecords();
           }, 10000);
           // Store interval ID to clear it later if needed
-          (window as any).draftAutoRefresh = autoRefresh;
+          (window as Window & { draftAutoRefresh?: NodeJS.Timeout }).draftAutoRefresh = autoRefresh;
         }
       }, 10000); // Check every 10 seconds
 
