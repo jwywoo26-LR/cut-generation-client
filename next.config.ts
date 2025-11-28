@@ -29,12 +29,18 @@ const nextConfig: NextConfig = {
   experimental: {
     serverComponentsExternalPackages: ['canvas', 'ag-psd'],
   },
-  // Configure webpack to exclude large dependencies from bundles where not needed
-  webpack: (config, { isServer }) => {
+  // Disable webpack cache in production to reduce bundle size
+  webpack: (config, { isServer, dev }) => {
+    // Disable cache in production builds
+    if (!dev) {
+      config.cache = false;
+    }
+
     if (isServer) {
       config.externals = config.externals || [];
       config.externals.push({
         canvas: 'canvas',
+        'ag-psd': 'ag-psd',
       });
     }
     return config;

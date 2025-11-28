@@ -1,12 +1,16 @@
-# Cache directories
+# Cache directories - exclude all cache
 .next/cache
+.next/cache/**
 .git
+.git/**
 
 # Development files
 node_modules/.cache
+node_modules/.cache/**
 
 # Public data that's not needed in serverless functions
 public/data/mosaic_ex
+public/data/mosaic_ex/**
 
 # Test files
 **/*.test.ts
@@ -17,3 +21,6 @@ public/data/mosaic_ex
 # Development tools
 .vscode
 .idea
+
+# Vercel build cache
+.vercel
