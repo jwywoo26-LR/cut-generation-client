@@ -26,9 +26,7 @@ const nextConfig: NextConfig = {
     ],
   },
   // Optimize serverless function size
-  experimental: {
-    serverComponentsExternalPackages: ['canvas', 'ag-psd'],
-  },
+  serverExternalPackages: ['canvas', 'ag-psd'],
   // Disable webpack cache in production to reduce bundle size
   webpack: (config, { isServer, dev }) => {
     // Disable cache in production builds
