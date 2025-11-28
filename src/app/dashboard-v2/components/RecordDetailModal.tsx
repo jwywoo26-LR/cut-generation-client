@@ -401,7 +401,14 @@ function RecordInfoColumn({
 }: RecordInfoColumnProps) {
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [isStyleRulesExpanded, setIsStyleRulesExpanded] = useState(false);
+  const [characterFilterMode, setCharacterFilterMode] = useState<'all' | 'single' | 'nsfw'>('all');
   const selectedCharacter = characters.find(c => c.character_id === editedFields.character_id);
+
+  // Filter characters based on selected filter mode
+  const filteredCharacters = characters.filter((character) => {
+    if (characterFilterMode === 'all') return true;
+    return character.training_mode === characterFilterMode;
+  });
 
   // Parse applied style rules
   const appliedStyleRules = selectedRecord.fields.applied_style_rules as string | undefined;
@@ -460,7 +467,21 @@ function RecordInfoColumn({
 
           {/* Dropdown Menu */}
           {isDropdownOpen && (
-            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-60 overflow-y-auto">
+            <div className="absolute z-50 w-full mt-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-lg max-h-80 overflow-y-auto">
+              {/* Filter Dropdown */}
+              <div className="sticky top-0 bg-white dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600 p-2">
+                <select
+                  value={characterFilterMode}
+                  onChange={(e) => setCharacterFilterMode(e.target.value as 'all' | 'single' | 'nsfw')}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-800 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="all">All</option>
+                  <option value="single">Single</option>
+                  <option value="nsfw">NSFW</option>
+                </select>
+              </div>
+
               {/* Clear option */}
               <button
                 type="button"
@@ -472,7 +493,14 @@ function RecordInfoColumn({
               >
                 Clear selection
               </button>
-              {characters.map((character) => (
+
+              {/* Character List */}
+              {filteredCharacters.length === 0 ? (
+                <div className="px-3 py-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                  No {characterFilterMode === 'all' ? '' : characterFilterMode} characters found
+                </div>
+              ) : (
+                filteredCharacters.map((character) => (
                 <button
                   key={character.id}
                   type="button"
@@ -511,7 +539,7 @@ function RecordInfoColumn({
                     </svg>
                   )}
                 </button>
-              ))}
+              )))}
             </div>
           )}
         </div>

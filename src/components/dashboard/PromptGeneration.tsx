@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 interface PromptGenResult {
   recordId: string;
@@ -19,6 +19,12 @@ export default function PromptGeneration({ currentTable, onPromptGenerated }: Pr
   const [isGenerating, setIsGenerating] = useState(false);
   const [results, setResults] = useState<PromptGenResult[]>([]);
   const [error, setError] = useState<string>('');
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [isMounted, setIsMounted] = useState(false);
+
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleGeneratePrompts = async () => {
     if (!currentTable) {
@@ -29,6 +35,7 @@ export default function PromptGeneration({ currentTable, onPromptGenerated }: Pr
     setIsGenerating(true);
     setError('');
     setResults([]);
+    setProgress({ current: 0, total: 0 });
 
     try {
       const response = await fetch('/api/prompt-generation', {
@@ -42,18 +49,75 @@ export default function PromptGeneration({ currentTable, onPromptGenerated }: Pr
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to generate prompts');
+        // Check if response is JSON or text
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('application/json')) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Failed to generate prompts');
+        } else {
+          const errorText = await response.text();
+          throw new Error(errorText || 'Failed to generate prompts');
+        }
       }
 
-      const data = await response.json();
-      setResults(data.results || []);
-      
-      if (data.processedCount === 0) {
-        setError('No records found that need prompt generation');
-      } else {
-        // Trigger refresh of the AirtableRecords component
-        onPromptGenerated?.();
+      // Check if response is JSON (no records case) or SSE stream
+      const contentType = response.headers.get('content-type');
+
+      if (contentType && contentType.includes('application/json')) {
+        // Handle JSON response (no records to process)
+        const data = await response.json();
+        if (data.processedCount === 0) {
+          setError('No records found that need prompt generation');
+        }
+        return;
+      }
+
+      // Read the SSE stream
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            const data = JSON.parse(line.slice(6));
+
+            if (data.type === 'start') {
+              setProgress({ current: 0, total: data.total });
+            } else if (data.type === 'progress') {
+              setProgress({ current: data.current, total: data.total });
+
+              // Add result to the list
+              setResults(prev => [...prev, {
+                recordId: data.recordId,
+                status: data.status === 'success' ? 'success' : 'error',
+                error: data.error,
+              }]);
+            } else if (data.type === 'complete') {
+              setProgress({ current: data.processedCount, total: data.processedCount });
+
+              if (data.processedCount === 0) {
+                setError('No records found that need prompt generation');
+              } else {
+                // Trigger refresh of the AirtableRecords component
+                onPromptGenerated?.();
+              }
+            }
+          }
+        }
       }
 
     } catch (error) {
@@ -66,6 +130,28 @@ export default function PromptGeneration({ currentTable, onPromptGenerated }: Pr
 
   const successCount = results.filter(r => r.status === 'success').length;
   const errorCount = results.filter(r => r.status === 'error').length;
+
+  const progressPercentage = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+
+  // Prevent hydration mismatch by not rendering dynamic content until mounted
+  if (!isMounted) {
+    return (
+      <div className="space-y-6">
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
+          <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
+            Prompt Generation
+          </h3>
+          <div className="flex gap-6">
+            <div className="flex-1">
+              <p className="text-gray-600 dark:text-gray-300 text-sm">
+                Generate initial and enhanced prompts for records that only have reference images filled.
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -113,6 +199,29 @@ export default function PromptGeneration({ currentTable, onPromptGenerated }: Pr
             </button>
           </div>
         </div>
+
+        {/* Progress Bar */}
+        {isGenerating && progress.total > 0 && (
+          <div className="mt-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                Processing prompts...
+              </span>
+              <span className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                {progress.current} / {progress.total}
+              </span>
+            </div>
+            <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2.5 overflow-hidden">
+              <div
+                className="bg-blue-600 h-2.5 rounded-full transition-all duration-300 ease-out"
+                style={{ width: `${progressPercentage}%` }}
+              ></div>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {progressPercentage.toFixed(0)}% complete
+            </p>
+          </div>
+        )}
       </div>
 
       {/* Error Display */}

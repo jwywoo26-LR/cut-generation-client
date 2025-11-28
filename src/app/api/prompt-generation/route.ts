@@ -273,7 +273,14 @@ export async function POST(request: Request) {
       recordRowMap.set(record.id, index + 1);
     });
 
-    const results = [];
+    const results: Array<{
+      recordId: string;
+      rowNumber?: number;
+      status: 'success' | 'error';
+      initialPrompt?: string;
+      appliedRulesCount?: number;
+      error?: string;
+    }> = [];
 
     // First, set status to "initial_request_sent" for all records to prevent duplicates
     for (const record of recordsNeedingPrompts) {
@@ -293,151 +300,218 @@ export async function POST(request: Request) {
       }
     }
     
-    // Process each record
-    for (const record of recordsNeedingPrompts) {
-      try {
-        // Get reference image URL
-        const referenceImageField = record.fields.reference_image_attached;
-        let imageUrl = '';
-        
-        if (referenceImageField && Array.isArray(referenceImageField) && referenceImageField.length > 0) {
-          imageUrl = referenceImageField[0].url;
-        }
-
-        if (!imageUrl) {
-          console.log(`Skipping record ${record.id}: No reference image found`);
-          // Set status to "False" for records without reference images
-          await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              fields: { status: 'False' }
-            })
-          });
-          continue;
-        }
-
-        // Get row number for this record
-        const rowNumber = recordRowMap.get(record.id) || 1;
-
-        // Build style-aware prompt if style rules are provided
-        const basePrompt = SYSTEM_PROMPTS[SystemPromptType.TAG_INITIAL_GENERATION];
-        const { prompt: styleAwarePrompt, appliedRules } = buildStyleAwarePrompt(
-          basePrompt,
-          styleRules,
-          rowNumber
-        );
-
-        // Generate prompt using Grok API with style-aware prompt
-        const grokResponse = await grokClient.evaluateImagePrompt(
-          imageUrl,
-          styleAwarePrompt,
-          `Reference: ${record.fields.reference_image || ''}, Row: ${rowNumber}`
-        );
-
-        // Extract prompt content
-        let initialPrompt = '';
-
-        if (grokResponse.choices && grokResponse.choices.length > 0) {
-          initialPrompt = grokResponse.choices[0].message.content;
-        }
-
-        // Prepare applied rules as JSON string for storage
-        const appliedStyleRulesJson = appliedRules.length > 0
-          ? JSON.stringify(appliedRules, null, 2)
-          : '';
-
-        // Update the record in Airtable with generated prompt and applied rules
-        const updatePayload: { fields: Record<string, string> } = {
-          fields: {
-            initial_prompt: initialPrompt,
-            applied_style_rules: appliedStyleRulesJson,
-          }
+    // Create a streaming response
+    const encoder = new TextEncoder();
+    const stream = new ReadableStream({
+      async start(controller) {
+        const sendProgress = (data: unknown) => {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(data)}\n\n`));
         };
 
-        let updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
-          method: 'PATCH',
-          headers: {
-            'Authorization': `Bearer ${apiKey}`,
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify(updatePayload)
+        // Send initial progress
+        sendProgress({
+          type: 'start',
+          total: recordsNeedingPrompts.length,
         });
 
-        // If update fails, try without applied_style_rules (field might not exist in older tables)
-        if (!updateResponse.ok) {
-          const errorText = await updateResponse.text();
-          console.error(`Airtable update error for record ${record.id}:`, errorText);
+        // Process each record
+        for (let index = 0; index < recordsNeedingPrompts.length; index++) {
+          const record = recordsNeedingPrompts[index];
 
-          // Retry without applied_style_rules field
-          if (errorText.includes('applied_style_rules') || errorText.includes('UNKNOWN_FIELD_NAME')) {
-            console.log(`Retrying update without applied_style_rules for record ${record.id}`);
-            const fallbackPayload = {
+          try {
+            // Get reference image URL
+            const referenceImageField = record.fields.reference_image_attached;
+            let imageUrl = '';
+
+            if (referenceImageField && Array.isArray(referenceImageField) && referenceImageField.length > 0) {
+              imageUrl = referenceImageField[0].url;
+            }
+
+            if (!imageUrl) {
+              console.log(`Skipping record ${record.id}: No reference image found`);
+              // Set status to "False" for records without reference images
+              await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  fields: { status: 'False' }
+                })
+              });
+
+              sendProgress({
+                type: 'progress',
+                current: index + 1,
+                total: recordsNeedingPrompts.length,
+                recordId: record.id,
+                status: 'skipped',
+                message: 'No reference image found',
+              });
+
+              results.push({
+                recordId: record.id,
+                status: 'error' as const,
+                error: 'No reference image found'
+              });
+              continue;
+            }
+
+            // Get row number for this record
+            const rowNumber = recordRowMap.get(record.id) || 1;
+
+            // Build style-aware prompt if style rules are provided
+            const basePrompt = SYSTEM_PROMPTS[SystemPromptType.TAG_INITIAL_GENERATION];
+            const { prompt: styleAwarePrompt, appliedRules } = buildStyleAwarePrompt(
+              basePrompt,
+              styleRules,
+              rowNumber
+            );
+
+            // Generate prompt using Grok API with style-aware prompt
+            const grokResponse = await grokClient.evaluateImagePrompt(
+              imageUrl,
+              styleAwarePrompt,
+              `Reference: ${record.fields.reference_image || ''}, Row: ${rowNumber}`
+            );
+
+            // Extract prompt content
+            let initialPrompt = '';
+
+            if (grokResponse.choices && grokResponse.choices.length > 0) {
+              initialPrompt = grokResponse.choices[0].message.content;
+            }
+
+            // Prepare applied rules as JSON string for storage
+            const appliedStyleRulesJson = appliedRules.length > 0
+              ? JSON.stringify(appliedRules, null, 2)
+              : '';
+
+            // Update the record in Airtable with generated prompt and applied rules
+            const updatePayload: { fields: Record<string, string> } = {
               fields: {
                 initial_prompt: initialPrompt,
+                applied_style_rules: appliedStyleRulesJson,
               }
             };
 
-            updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+            let updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
               method: 'PATCH',
               headers: {
                 'Authorization': `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
               },
-              body: JSON.stringify(fallbackPayload)
+              body: JSON.stringify(updatePayload)
             });
 
+            // If update fails, try without applied_style_rules (field might not exist in older tables)
             if (!updateResponse.ok) {
-              const fallbackError = await updateResponse.text();
-              throw new Error(`Failed to update record ${record.id}: ${fallbackError}`);
+              const errorText = await updateResponse.text();
+              console.error(`Airtable update error for record ${record.id}:`, errorText);
+
+              // Retry without applied_style_rules field
+              if (errorText.includes('applied_style_rules') || errorText.includes('UNKNOWN_FIELD_NAME')) {
+                console.log(`Retrying update without applied_style_rules for record ${record.id}`);
+                const fallbackPayload = {
+                  fields: {
+                    initial_prompt: initialPrompt,
+                  }
+                };
+
+                updateResponse = await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+                  method: 'PATCH',
+                  headers: {
+                    'Authorization': `Bearer ${apiKey}`,
+                    'Content-Type': 'application/json',
+                  },
+                  body: JSON.stringify(fallbackPayload)
+                });
+
+                if (!updateResponse.ok) {
+                  const fallbackError = await updateResponse.text();
+                  throw new Error(`Failed to update record ${record.id}: ${fallbackError}`);
+                }
+              } else {
+                throw new Error(`Failed to update record ${record.id}: ${errorText}`);
+              }
             }
-          } else {
-            throw new Error(`Failed to update record ${record.id}: ${errorText}`);
+
+            const result = {
+              recordId: record.id,
+              rowNumber,
+              status: 'success' as const,
+              initialPrompt,
+              appliedRulesCount: appliedRules.length
+            };
+
+            results.push(result);
+
+            // Send progress update
+            sendProgress({
+              type: 'progress',
+              current: index + 1,
+              total: recordsNeedingPrompts.length,
+              recordId: record.id,
+              status: 'success',
+            });
+
+          } catch (error) {
+            console.error(`Error processing record ${record.id}:`, error);
+
+            // Set status to "False" on error
+            try {
+              await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
+                method: 'PATCH',
+                headers: {
+                  'Authorization': `Bearer ${apiKey}`,
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  fields: { status: 'False' }
+                })
+              });
+            } catch (statusError) {
+              console.error(`Failed to set error status for record ${record.id}:`, statusError);
+            }
+
+            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+
+            results.push({
+              recordId: record.id,
+              status: 'error' as const,
+              error: errorMessage
+            });
+
+            // Send progress update with error
+            sendProgress({
+              type: 'progress',
+              current: index + 1,
+              total: recordsNeedingPrompts.length,
+              recordId: record.id,
+              status: 'error',
+              error: errorMessage,
+            });
           }
         }
 
-        results.push({
-          recordId: record.id,
-          rowNumber,
-          status: 'success',
-          initialPrompt,
-          appliedRulesCount: appliedRules.length
+        // Send completion
+        sendProgress({
+          type: 'complete',
+          results,
+          processedCount: results.length,
         });
 
-      } catch (error) {
-        console.error(`Error processing record ${record.id}:`, error);
-        
-        // Set status to "False" on error
-        try {
-          await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
-            method: 'PATCH',
-            headers: {
-              'Authorization': `Bearer ${apiKey}`,
-              'Content-Type': 'application/json',
-            },
-            body: JSON.stringify({
-              fields: { status: 'False' }
-            })
-          });
-        } catch (statusError) {
-          console.error(`Failed to set error status for record ${record.id}:`, statusError);
-        }
-        
-        results.push({
-          recordId: record.id,
-          status: 'error',
-          error: error instanceof Error ? error.message : 'Unknown error'
-        });
+        controller.close();
       }
-    }
+    });
 
-    return NextResponse.json({
-      message: `Processed ${results.length} records`,
-      processedCount: results.length,
-      results
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
 
   } catch (error) {

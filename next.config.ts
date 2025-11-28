@@ -19,6 +19,10 @@ const nextConfig: NextConfig = {
         protocol: 'https',
         hostname: 'via.placeholder.com',
       },
+      {
+        protocol: 'https',
+        hostname: 'genvas-saas-stage.s3.ap-northeast-2.amazonaws.com',
+      },
     ],
   },
 };

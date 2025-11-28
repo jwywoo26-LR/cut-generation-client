@@ -8,7 +8,10 @@ interface Model {
   name: string;
   thumbnail: string;
   description?: string; // Optional field that might be returned from API
+  training_mode?: string; // Training mode: single or nsfw
 }
+
+type FilterMode = 'all' | 'single' | 'nsfw';
 
 interface ModelSelectionProps {
   selectedModelId?: string;
@@ -19,6 +22,7 @@ interface ModelSelectionProps {
 
 export default function ModelSelection({ selectedModelId, onModelSelect, currentTable, onTableSync }: ModelSelectionProps) {
   const [models, setModels] = useState<Model[]>([]);
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [expandedModel, setExpandedModel] = useState<Model | null>(null);
@@ -102,13 +106,14 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
       if (response.ok) {
         const data = await response.json();
         // Filter and clean the models data to ensure valid structure
-        const cleanModels = (data.models || []).filter((model: { id: unknown; name: unknown; thumbnail?: unknown; description?: unknown }) => 
+        const cleanModels = (data.models || []).filter((model: { id: unknown; name: unknown; thumbnail?: unknown; description?: unknown; training_mode?: unknown }) =>
           model && typeof model === 'object' && model.id && model.name
-        ).map((model: { id: unknown; name: unknown; thumbnail?: unknown; description?: unknown }) => ({
+        ).map((model: { id: unknown; name: unknown; thumbnail?: unknown; description?: unknown; training_mode?: unknown }) => ({
           id: String(model.id),
           name: String(model.name),
           thumbnail: model.thumbnail || '',
-          description: model.description
+          description: model.description,
+          training_mode: model.training_mode ? String(model.training_mode) : undefined
         }));
         setModels(cleanModels);
       } else {
@@ -123,25 +128,71 @@ export default function ModelSelection({ selectedModelId, onModelSelect, current
     }
   };
 
+  // Filter models based on selected filter mode
+  const filteredModels = models.filter((model) => {
+    if (filterMode === 'all') return true;
+    return model.training_mode === filterMode;
+  });
+
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 h-full flex flex-col">
       <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4">
         Model Selection
       </h2>
-      
+
+      {/* Filter Tabs */}
+      <div className="mb-4">
+        <div className="border-b border-gray-200 dark:border-gray-700">
+          <nav className="-mb-px flex space-x-6">
+            <button
+              onClick={() => setFilterMode('all')}
+              className={`${
+                filterMode === 'all'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              All
+            </button>
+            <button
+              onClick={() => setFilterMode('single')}
+              className={`${
+                filterMode === 'single'
+                  ? 'border-blue-500 text-blue-600 dark:text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              Single
+            </button>
+            <button
+              onClick={() => setFilterMode('nsfw')}
+              className={`${
+                filterMode === 'nsfw'
+                  ? 'border-purple-500 text-purple-600 dark:text-purple-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300 dark:text-gray-400 dark:hover:text-gray-300'
+              } whitespace-nowrap py-2 px-1 border-b-2 font-medium text-sm transition-colors`}
+            >
+              NSFW
+            </button>
+          </nav>
+        </div>
+      </div>
+
       {isLoading ? (
         <div className="text-center py-8">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-4 text-gray-600 dark:text-gray-300">Loading models...</p>
         </div>
-      ) : models.length === 0 ? (
+      ) : filteredModels.length === 0 ? (
         <div className="text-center py-8">
-          <p className="text-gray-500 dark:text-gray-400">No active models found.</p>
+          <p className="text-gray-500 dark:text-gray-400">
+            {models.length === 0 ? 'No active models found.' : `No ${filterMode === 'all' ? '' : filterMode} models found.`}
+          </p>
         </div>
       ) : (
         <div className="flex-1 overflow-y-auto">
           <div className="space-y-4">
-            {models.map((model) => (
+            {filteredModels.map((model) => (
               <div
                 key={model.id}
                 className={`

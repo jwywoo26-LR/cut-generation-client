@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 
 export interface Character {
   id: string;
@@ -8,7 +8,10 @@ export interface Character {
   character_name: string;
   character_image: string;
   status: string;
+  training_mode?: string;
 }
+
+type FilterMode = 'all' | 'single' | 'nsfw';
 
 interface AvailableCharactersProps {
   characters: Character[];
@@ -27,19 +30,40 @@ export function AvailableCharacters({
   onApplyCharacter,
   onRefresh,
 }: AvailableCharactersProps) {
+  const [filterMode, setFilterMode] = useState<FilterMode>('all');
+
+  // Filter characters based on selected filter mode
+  const filteredCharacters = characters.filter((character) => {
+    if (filterMode === 'all') return true;
+    return character.training_mode === filterMode;
+  });
+
   return (
     <div className="mt-6 bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
       <div className="flex justify-between items-center mb-3">
         <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
           Available Characters
         </h3>
-        <button
-          onClick={onRefresh}
-          disabled={isLoading}
-          className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
-        >
-          {isLoading ? 'Loading...' : 'Refresh'}
-        </button>
+        <div className="flex items-center gap-3">
+          {/* Filter Dropdown */}
+          <select
+            value={filterMode}
+            onChange={(e) => setFilterMode(e.target.value as FilterMode)}
+            className="text-sm px-3 py-1.5 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All</option>
+            <option value="single">Single</option>
+            <option value="nsfw">NSFW</option>
+          </select>
+
+          <button
+            onClick={onRefresh}
+            disabled={isLoading}
+            className="text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 disabled:opacity-50"
+          >
+            {isLoading ? 'Loading...' : 'Refresh'}
+          </button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -47,13 +71,16 @@ export function AvailableCharacters({
           <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600 mx-auto"></div>
           <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">Loading characters...</p>
         </div>
-      ) : characters.length === 0 ? (
+      ) : filteredCharacters.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">
-          No active characters found in dmm_characters table.
+          {characters.length === 0
+            ? 'No active characters found in dmm_characters table.'
+            : `No ${filterMode === 'all' ? '' : filterMode} characters found.`
+          }
         </p>
       ) : (
         <div className="space-y-3 max-h-[400px] overflow-y-auto">
-          {characters.map((character) => (
+          {filteredCharacters.map((character) => (
             <div
               key={character.id}
               className="flex items-center gap-3 p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg border border-gray-200 dark:border-gray-600"

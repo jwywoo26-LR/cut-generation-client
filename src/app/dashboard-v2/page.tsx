@@ -94,7 +94,7 @@ export default function DashboardV2Page() {
   const [miroGenerationError, setMiroGenerationError] = useState('');
   const [activeMiroBoardUrl, setActiveMiroBoardUrl] = useState<string | null>(null);
   const [variations, setVariations] = useState(1);
-  const [queueSize, setQueueSize] = useState(5);
+  const [queueSize, setQueueSize] = useState(25);
   const [massGenerationPromptType, setMassGenerationPromptType] = useState<'initial_prompt' | 'restyled_prompt' | 'edit_prompt'>('initial_prompt');
   const [followReferenceRatio, setFollowReferenceRatio] = useState(false);
 
@@ -102,7 +102,7 @@ export default function DashboardV2Page() {
   const [isGeneratingDraft, setIsGeneratingDraft] = useState(false);
   const [draftGenerationProgress, setDraftGenerationProgress] = useState<{current: number; total: number} | null>(null);
   const [draftGenerationError, setDraftGenerationError] = useState('');
-  const [draftQueueSize, setDraftQueueSize] = useState(5);
+  const [draftQueueSize, setDraftQueueSize] = useState(25);
 
   // Restyle state
   const [restyleRules, setRestyleRules] = useState<RestyleRule[]>([]);
@@ -223,6 +223,7 @@ export default function DashboardV2Page() {
               character_name: (record.fields.character_name as string) || '',
               character_image: imageUrl,
               status: (record.fields.status as string) || '',
+              training_mode: (record.fields.training_mode as string) || undefined,
             };
           });
         setCharacters(activeCharacters);
