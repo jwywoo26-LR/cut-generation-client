@@ -1,0 +1,19 @@
+# Cache directories
+.next/cache
+.git
+
+# Development files
+node_modules/.cache
+
+# Public data that's not needed in serverless functions
+public/data/mosaic_ex
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+
+# Development tools
+.vscode
+.idea

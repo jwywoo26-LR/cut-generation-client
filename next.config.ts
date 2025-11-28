@@ -25,6 +25,20 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  // Optimize serverless function size
+  experimental: {
+    serverComponentsExternalPackages: ['canvas', 'ag-psd'],
+  },
+  // Configure webpack to exclude large dependencies from bundles where not needed
+  webpack: (config, { isServer }) => {
+    if (isServer) {
+      config.externals = config.externals || [];
+      config.externals.push({
+        canvas: 'canvas',
+      });
+    }
+    return config;
+  },
 };
 
 export default nextConfig;
