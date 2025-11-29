@@ -26,6 +26,18 @@ interface PromptGenerationTabProps {
   restyleProgress: { current: number; total: number } | null;
   restyleError: string;
 
+  // Random prompt generation state
+  isGeneratingRandomPrompts: boolean;
+  randomPromptProgress: { current: number; total: number } | null;
+  randomPromptError: string;
+  randomPromptColumn: string;
+  randomPromptTheme: string;
+  randomPromptDefaultTags: string;
+  onRandomPromptColumnChange: (column: string) => void;
+  onRandomPromptThemeChange: (theme: string) => void;
+  onRandomPromptDefaultTagsChange: (tags: string) => void;
+  onGenerateRandomPrompts: () => void;
+
   // Handlers
   onGenerateInitialPrompts: () => void;
   onRestylePrompts: () => void;
@@ -50,6 +62,16 @@ export function PromptGenerationTab({
   isRestyling,
   restyleProgress,
   restyleError,
+  isGeneratingRandomPrompts,
+  randomPromptProgress,
+  randomPromptError,
+  randomPromptColumn,
+  randomPromptTheme,
+  randomPromptDefaultTags,
+  onRandomPromptColumnChange,
+  onRandomPromptThemeChange,
+  onRandomPromptDefaultTagsChange,
+  onGenerateRandomPrompts,
   onGenerateInitialPrompts,
   onRestylePrompts,
   selectedTable,
@@ -187,6 +209,104 @@ export function PromptGenerationTab({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
                 Restyle Prompts ({restyleRules.length} rule{restyleRules.length !== 1 ? 's' : ''})
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* Random Prompt Generation Section */}
+      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+        <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">
+          Random Prompt Generation
+        </h3>
+        <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+          Generate creative random prompts for all records using AI. Perfect for generating diverse, imaginative content.
+        </p>
+
+        {/* Target Column Selection */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Target Column
+          </label>
+          <select
+            value={randomPromptColumn}
+            onChange={(e) => onRandomPromptColumnChange(e.target.value)}
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm"
+          >
+            <option value="initial_prompt">Initial Prompt</option>
+            <option value="restyled_prompt">Restyled Prompt</option>
+            <option value="edit_prompt">Edit Prompt</option>
+          </select>
+        </div>
+
+        {/* Theme Input */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Theme / Direction (optional)
+          </label>
+          <input
+            type="text"
+            value={randomPromptTheme}
+            onChange={(e) => onRandomPromptThemeChange(e.target.value)}
+            placeholder="e.g., fantasy adventure, cyberpunk city, peaceful nature..."
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            Leave empty for completely random prompts, or provide a theme to guide generation
+          </p>
+        </div>
+
+        {/* Default Tags Input */}
+        <div className="mb-4">
+          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Default Tags (required in all prompts)
+          </label>
+          <input
+            type="text"
+            value={randomPromptDefaultTags}
+            onChange={(e) => onRandomPromptDefaultTagsChange(e.target.value)}
+            placeholder="e.g., 1girl, solo, high quality, masterpiece..."
+            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-sm placeholder-gray-400"
+          />
+          <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+            These tags will be included in every generated prompt. Separate with commas.
+          </p>
+        </div>
+
+        {/* Status Messages */}
+        <div className="space-y-3">
+          {randomPromptError && (
+            <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded text-xs">
+              {randomPromptError}
+            </div>
+          )}
+          {randomPromptProgress && (
+            <div className="p-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded text-xs">
+              Processing: {randomPromptProgress.current} / {randomPromptProgress.total}
+            </div>
+          )}
+
+          {/* Generate Button */}
+          <button
+            onClick={onGenerateRandomPrompts}
+            disabled={isGeneratingRandomPrompts || !selectedTable}
+            className="w-full px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isGeneratingRandomPrompts ? (
+              <>
+                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Generating Random Prompts...
+              </>
+            ) : (
+              <>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Generate Random Prompts
               </>
             )}
           </button>

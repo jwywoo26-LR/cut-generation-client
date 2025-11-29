@@ -54,6 +54,9 @@ export default function DashboardV2Page() {
   // Per-row status update state
   const [updatingStatusRecordId, setUpdatingStatusRecordId] = useState<string | null>(null);
 
+  // Per-row generation type update state
+  const [updatingGenerationTypeRecordId, setUpdatingGenerationTypeRecordId] = useState<string | null>(null);
+
   // Detail modal state
   const [selectedRecord, setSelectedRecord] = useState<AirtableRecord | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
@@ -111,6 +114,14 @@ export default function DashboardV2Page() {
   const [isRestyling, setIsRestyling] = useState(false);
   const [restyleProgress, setRestyleProgress] = useState<{current: number; total: number} | null>(null);
   const [restyleError, setRestyleError] = useState('');
+
+  // Random prompt generation state
+  const [isGeneratingRandomPrompts, setIsGeneratingRandomPrompts] = useState(false);
+  const [randomPromptProgress, setRandomPromptProgress] = useState<{ current: number; total: number } | null>(null);
+  const [randomPromptError, setRandomPromptError] = useState<string>('');
+  const [randomPromptColumn, setRandomPromptColumn] = useState<'initial_prompt' | 'restyled_prompt' | 'edit_prompt'>('initial_prompt');
+  const [randomPromptTheme, setRandomPromptTheme] = useState<string>('');
+  const [randomPromptDefaultTags, setRandomPromptDefaultTags] = useState<string>('1girl, solo, high quality, masterpiece');
 
   // Timing settings state (shared between Draft Generation and Mass Generation)
   const [timingSettings, setTimingSettings] = useState<TimingSettings>(DEFAULT_TIMING_SETTINGS);
@@ -545,6 +556,76 @@ export default function DashboardV2Page() {
     }
   };
 
+  const handleGenerationTypeChange = async (recordId: string, newType: 'prompt' | 'reference') => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    setUpdatingGenerationTypeRecordId(recordId);
+
+    try {
+      const response = await fetch('/api/airtable/update-record', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          recordId: recordId,
+          fields: { generation_type: newType },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setRecords(prevRecords =>
+          prevRecords.map(r => r.id === data.record.id ? data.record : r)
+        );
+      } else {
+        const data = await response.json();
+        alert(`Failed to update generation type: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to update generation type:', error);
+      alert(`Failed to update generation type: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setUpdatingGenerationTypeRecordId(null);
+    }
+  };
+
+  const handleBulkGenerationTypeChange = async (newType: 'prompt' | 'reference') => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    if (!confirm(`Apply "${newType}" generation type to all ${records.length} records?\n\nThis will update all records in the current table.`)) {
+      return;
+    }
+
+    setUpdatingGenerationTypeRecordId('bulk'); // Use 'bulk' as a special indicator
+
+    try {
+      const response = await fetch('/api/airtable/bulk-update-generation-type', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          generationType: newType,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Successfully updated ${data.updatedCount} records to "${newType}"`);
+        await loadRecords(); // Reload all records to reflect changes
+      } else {
+        const data = await response.json();
+        alert(`Failed to bulk update generation type: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to bulk update generation type:', error);
+      alert(`Failed to bulk update generation type: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setUpdatingGenerationTypeRecordId(null);
+    }
+  };
+
   // ===== Upload Handlers =====
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -669,6 +750,7 @@ export default function DashboardV2Page() {
       restyled_prompt: (record.fields.restyled_prompt as string) || '',
       edit_prompt: (record.fields.edit_prompt as string) || '',
       regenerate_status: (record.fields.regenerate_status as string) || '',
+      generation_type: (record.fields.generation_type as string) || 'reference',
     });
     setShowDetailModal(true);
   };
@@ -1149,6 +1231,103 @@ export default function DashboardV2Page() {
     }
   };
 
+  // ===== Random Prompt Generation Handlers =====
+  const handleRandomPromptColumnChange = (column: string) => {
+    setRandomPromptColumn(column as 'initial_prompt' | 'restyled_prompt' | 'edit_prompt');
+  };
+
+  const handleGenerateRandomPrompts = async () => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) {
+      setRandomPromptError('No table selected');
+      return;
+    }
+
+    if (records.length === 0) {
+      setRandomPromptError('No records found in table');
+      return;
+    }
+
+    const themeMessage = randomPromptTheme ? `\nTheme: ${randomPromptTheme}` : '\nTheme: Random (no specific theme)';
+    const tagsMessage = randomPromptDefaultTags ? `\nDefault tags: ${randomPromptDefaultTags}` : '';
+
+    if (!confirm(`Generate random prompts for ${records.length} records?${themeMessage}${tagsMessage}\n\nTarget column: ${randomPromptColumn}`)) {
+      return;
+    }
+
+    setIsGeneratingRandomPrompts(true);
+    setRandomPromptError('');
+    setRandomPromptProgress({ current: 0, total: records.length });
+
+    try {
+      const response = await fetch('/api/random-prompt-generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          targetColumn: randomPromptColumn,
+          theme: randomPromptTheme || undefined,
+          defaultTags: randomPromptDefaultTags || undefined,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to start random prompt generation');
+      }
+
+      // Handle SSE streaming response
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('No response body');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (let i = 0; i < lines.length; i++) {
+          const line = lines[i];
+          if (line.startsWith('event: ')) {
+            const eventType = line.slice(7);
+            const dataLine = lines[i + 1];
+            if (dataLine && dataLine.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(dataLine.slice(6));
+
+                if (eventType === 'progress') {
+                  setRandomPromptProgress({ current: data.current, total: data.total });
+                } else if (eventType === 'complete') {
+                  alert(`Random prompt generation complete!\n\nProcessed: ${data.processedCount}\nSuccess: ${data.successCount}\nErrors: ${data.errorCount}`);
+                  await loadRecords();
+                } else if (eventType === 'error') {
+                  setRandomPromptError(data.error || 'Failed to generate random prompts');
+                }
+              } catch {
+                // Skip invalid JSON
+              }
+              i++; // Skip the data line we just processed
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to generate random prompts:', error);
+      setRandomPromptError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsGeneratingRandomPrompts(false);
+      setRandomPromptProgress(null);
+    }
+  };
+
   // ===== Image Generation Handlers =====
   const imageUrlToBase64 = async (url: string): Promise<string> => {
     const response = await fetch(url);
@@ -1460,6 +1639,7 @@ export default function DashboardV2Page() {
                       uploadingRecordId={uploadingRecordId}
                       deletingRecordId={deletingRecordId}
                       updatingStatusRecordId={updatingStatusRecordId}
+                      updatingGenerationTypeRecordId={updatingGenerationTypeRecordId}
                       characters={characters}
                       isCreatingRecord={isCreatingRecord}
                       selectedFiles={selectedFiles}
@@ -1474,6 +1654,8 @@ export default function DashboardV2Page() {
                       onRowImageUpload={handleRowImageUpload}
                       onDeleteRecord={handleDeleteRecord}
                       onStatusChange={handleStatusChange}
+                      onGenerationTypeChange={handleGenerationTypeChange}
+                      onBulkGenerationTypeChange={handleBulkGenerationTypeChange}
                     />
                   )}
 
@@ -1498,6 +1680,16 @@ export default function DashboardV2Page() {
                       restyleProgress={restyleProgress}
                       restyleError={restyleError}
                       onRestylePrompts={handleRestylePrompts}
+                      isGeneratingRandomPrompts={isGeneratingRandomPrompts}
+                      randomPromptProgress={randomPromptProgress}
+                      randomPromptError={randomPromptError}
+                      randomPromptColumn={randomPromptColumn}
+                      randomPromptTheme={randomPromptTheme}
+                      randomPromptDefaultTags={randomPromptDefaultTags}
+                      onRandomPromptColumnChange={handleRandomPromptColumnChange}
+                      onRandomPromptThemeChange={setRandomPromptTheme}
+                      onRandomPromptDefaultTagsChange={setRandomPromptDefaultTags}
+                      onGenerateRandomPrompts={handleGenerateRandomPrompts}
                     />
                   )}
 

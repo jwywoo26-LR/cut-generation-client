@@ -10,11 +10,13 @@ interface RecordsTableProps {
   uploadingRecordId: string | null;
   deletingRecordId: string | null;
   updatingStatusRecordId: string | null;
+  updatingGenerationTypeRecordId: string | null;
   characters: Character[];
   onRowClick: (record: AirtableRecord) => void;
   onRowImageUpload: (recordId: string, file: File) => void;
   onDeleteRecord: (recordId: string) => void;
   onStatusChange: (recordId: string, status: string) => void;
+  onGenerationTypeChange: (recordId: string, newType: 'prompt' | 'reference') => void;
 }
 
 export function RecordsTable({
@@ -23,11 +25,13 @@ export function RecordsTable({
   uploadingRecordId,
   deletingRecordId,
   updatingStatusRecordId,
+  updatingGenerationTypeRecordId,
   characters,
   onRowClick,
   onRowImageUpload,
   onDeleteRecord,
   onStatusChange,
+  onGenerationTypeChange,
 }: RecordsTableProps) {
   // Helper function to find character by ID
   const getCharacterById = (characterId: string): Character | undefined => {
@@ -81,6 +85,9 @@ export function RecordsTable({
                 Reference Image
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                Generation Type
+              </th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
                 Status
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
@@ -112,6 +119,16 @@ export function RecordsTable({
                     record={record}
                     uploadingRecordId={uploadingRecordId}
                     onRowImageUpload={onRowImageUpload}
+                  />
+                </td>
+
+                {/* Generation Type */}
+                <td className="px-4 py-4 text-sm" onClick={(e) => e.stopPropagation()}>
+                  <GenerationTypeCell
+                    recordId={record.id}
+                    generationType={(record.fields.generation_type as 'prompt' | 'reference') || 'reference'}
+                    isUpdating={updatingGenerationTypeRecordId === record.id}
+                    onGenerationTypeChange={onGenerationTypeChange}
                   />
                 </td>
 
@@ -380,5 +397,34 @@ function CharacterCell({ characterId, character }: CharacterCellProps) {
       </div>
       <span className="text-xs truncate max-w-[100px]">{characterId}</span>
     </div>
+  );
+}
+
+// Generation Type Cell Component - Dropdown to change generation type
+function GenerationTypeCell({
+  recordId,
+  generationType,
+  isUpdating,
+  onGenerationTypeChange,
+}: {
+  recordId: string;
+  generationType: 'prompt' | 'reference';
+  isUpdating: boolean;
+  onGenerationTypeChange: (recordId: string, newType: 'prompt' | 'reference') => void;
+}) {
+  return (
+    <select
+      value={generationType}
+      onChange={(e) => onGenerationTypeChange(recordId, e.target.value as 'prompt' | 'reference')}
+      disabled={isUpdating}
+      className={`text-xs px-2 py-1 border rounded ${
+        generationType === 'prompt'
+          ? 'bg-purple-50 border-purple-300 text-purple-800 dark:bg-purple-900/30 dark:border-purple-700 dark:text-purple-300'
+          : 'bg-blue-50 border-blue-300 text-blue-800 dark:bg-blue-900/30 dark:border-blue-700 dark:text-blue-300'
+      } focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed`}
+    >
+      <option value="reference">Reference</option>
+      <option value="prompt">Prompt</option>
+    </select>
   );
 }

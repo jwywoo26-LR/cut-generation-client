@@ -1,0 +1,4 @@
+selenium
+boto3
+aiohttp
+python-dotenv

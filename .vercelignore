@@ -12,6 +12,12 @@ node_modules/.cache/**
 public/data/mosaic_ex
 public/data/mosaic_ex/**
 
+# Crawler data directories
+data/crawler/
+data/crawler/**
+public/data/crawler_ex
+public/data/crawler_ex/**
+
 # Test files
 **/*.test.ts
 **/*.test.tsx
@@ -24,3 +30,21 @@ public/data/mosaic_ex/**
 
 # Vercel build cache
 .vercel
+
+# Python crawler files and dependencies (keep separate from Vercel deployment)
+crawler/
+*.py
+*.pyc
+__pycache__/
+*.pyo
+*.pyd
+.Python
+venv/
+env/
+ENV/
+.venv/
+requirements.txt
+Pipfile
+Pipfile.lock
+poetry.lock
+pyproject.toml

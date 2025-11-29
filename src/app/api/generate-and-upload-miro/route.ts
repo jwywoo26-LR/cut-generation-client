@@ -110,6 +110,7 @@ interface AirtableRecord {
     status?: string;
     generated_image_url?: string;
     miro_item_id?: string;
+    generation_type?: 'prompt' | 'reference'; // Type of generation: prompt-only or reference-based
     [key: string]: unknown;
   };
 }
@@ -124,6 +125,7 @@ interface QueuedTask {
   rowLabel: string;
   width: number;
   height: number;
+  generationType: 'prompt' | 'reference'; // Type of generation
 }
 
 interface ActiveTask {
@@ -350,6 +352,9 @@ export async function POST(request: Request) {
 
             // Note: Not updating status field as it doesn't exist in this Airtable table
 
+            // Get generation type from record (defaults to 'reference' for backward compatibility)
+            const generationType = (record.fields.generation_type as 'prompt' | 'reference') || 'reference';
+
             // Add tasks for each variation (reference image will be downloaded when task is created)
             for (let v = 0; v < variations; v++) {
               taskQueue.push({
@@ -362,6 +367,7 @@ export async function POST(request: Request) {
                 rowLabel,
                 width,
                 height,
+                generationType,
               });
             }
           }
@@ -479,19 +485,32 @@ export async function POST(request: Request) {
             }
           };
 
-          // Helper function to create a task (downloads reference image per task)
+          // Helper function to create a task (downloads reference image per task if needed)
           const createTask = async (queuedTask: QueuedTask): Promise<string | null> => {
             try {
-              const referenceBuffer = await imageClient.downloadImage(queuedTask.referenceImageUrl);
-              const referenceBase64 = ImageAPIClient.encodeImageToBase64(referenceBuffer);
+              let generateResponse;
 
-              const generateResponse = await imageClient.generateImageWithReference({
-                prompt: queuedTask.prompt,
-                reference_image_base64: referenceBase64,
-                width: queuedTask.width,
-                height: queuedTask.height,
-                body_model_id: queuedTask.characterId || undefined,
-              });
+              if (queuedTask.generationType === 'prompt') {
+                // Prompt-only generation
+                generateResponse = await imageClient.createImageTask({
+                  prompt: queuedTask.prompt,
+                  width: queuedTask.width,
+                  height: queuedTask.height,
+                  body_model_id: queuedTask.characterId || undefined,
+                });
+              } else {
+                // Reference-based generation
+                const referenceBuffer = await imageClient.downloadImage(queuedTask.referenceImageUrl);
+                const referenceBase64 = ImageAPIClient.encodeImageToBase64(referenceBuffer);
+
+                generateResponse = await imageClient.generateImageWithReference({
+                  prompt: queuedTask.prompt,
+                  reference_image_base64: referenceBase64,
+                  width: queuedTask.width,
+                  height: queuedTask.height,
+                  body_model_id: queuedTask.characterId || undefined,
+                });
+              }
 
               return generateResponse.synth_id || null;
             } catch {
@@ -884,6 +903,9 @@ export async function POST(request: Request) {
 
       // Note: Not updating status field as it doesn't exist in this Airtable table
 
+      // Get generation type from record (defaults to 'reference' for backward compatibility)
+      const generationType = (record.fields.generation_type as 'prompt' | 'reference') || 'reference';
+
       // Add tasks for each variation (reference image will be downloaded when task is created)
       for (let v = 0; v < variations; v++) {
         taskQueue.push({
@@ -896,6 +918,7 @@ export async function POST(request: Request) {
           rowLabel,
           width,
           height,
+          generationType,
         });
       }
     }
@@ -1013,19 +1036,32 @@ export async function POST(request: Request) {
       }
     };
 
-    // Helper function to create a task (downloads reference image per task)
+    // Helper function to create a task (downloads reference image per task if needed)
     const createTask = async (queuedTask: QueuedTask): Promise<string | null> => {
       try {
-        const referenceBuffer = await imageClient.downloadImage(queuedTask.referenceImageUrl);
-        const referenceBase64 = ImageAPIClient.encodeImageToBase64(referenceBuffer);
+        let generateResponse;
 
-        const generateResponse = await imageClient.generateImageWithReference({
-          prompt: queuedTask.prompt,
-          reference_image_base64: referenceBase64,
-          width: queuedTask.width,
-          height: queuedTask.height,
-          body_model_id: queuedTask.characterId || undefined,
-        });
+        if (queuedTask.generationType === 'prompt') {
+          // Prompt-only generation
+          generateResponse = await imageClient.createImageTask({
+            prompt: queuedTask.prompt,
+            width: queuedTask.width,
+            height: queuedTask.height,
+            body_model_id: queuedTask.characterId || undefined,
+          });
+        } else {
+          // Reference-based generation
+          const referenceBuffer = await imageClient.downloadImage(queuedTask.referenceImageUrl);
+          const referenceBase64 = ImageAPIClient.encodeImageToBase64(referenceBuffer);
+
+          generateResponse = await imageClient.generateImageWithReference({
+            prompt: queuedTask.prompt,
+            reference_image_base64: referenceBase64,
+            width: queuedTask.width,
+            height: queuedTask.height,
+            body_model_id: queuedTask.characterId || undefined,
+          });
+        }
 
         return generateResponse.synth_id || null;
       } catch {
