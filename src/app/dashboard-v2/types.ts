@@ -27,3 +27,5 @@ export type TabType = 'manage' | 'prompt_generation' | 'mass_generation';
 export type PromptType = 'initial_prompt' | 'restyled_prompt' | 'edit_prompt';
 
 export type GenerationType = 'prompt' | 'reference';
+
+export type CrawlerMode = 'base' | 'detail' | 'extra';
