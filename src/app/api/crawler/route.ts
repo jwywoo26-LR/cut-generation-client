@@ -96,6 +96,16 @@ export async function POST(request: NextRequest) {
     if (uploadRanks) miroMessages.push('RANKS board');
     const miroSuffix = miroMessages.length > 0 ? ` and uploaded to ${miroMessages.join(' and ')}` : '';
 
+    // Clean up: delete the CSV file and output directory after processing
+    try {
+      await fs.unlink(csvPath); // Delete CSV file
+      await fs.rmdir(outputDir); // Delete empty directory
+      console.log('Cleaned up crawler output:', outputDir);
+    } catch (cleanupError) {
+      console.warn('Failed to clean up crawler output:', cleanupError);
+      // Don't fail the request if cleanup fails
+    }
+
     return NextResponse.json({
       success: true,
       message: `Crawled ${recordCount} records in ${mode} mode${miroSuffix}`,
