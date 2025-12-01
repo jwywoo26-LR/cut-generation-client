@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 
 interface NSFWRecord {
   id: string;
@@ -61,7 +61,7 @@ export default function NSFWDBManagerPage() {
       const data = await response.json();
 
       // Transform Airtable records to our format
-      const transformedRecords = (data.records || []).map((record: any) => ({
+      const transformedRecords = (data.records || []).map((record: { id: string; fields?: { angle1?: string; angle2?: string; action1?: string; generated_tags?: string; prompt?: string; image_attachment?: { url: string; filename: string }[] } }) => ({
         id: record.id,
         angle1: record.fields?.angle1 || '',
         angle2: record.fields?.angle2 || '',
@@ -184,13 +184,7 @@ export default function NSFWDBManagerPage() {
       );
       setSelectedRecord(editedRecord);
       setEditedRecord(null);
-
-      // Show success message briefly
-      const successMsg = 'Record updated successfully';
       setError('');
-      setTimeout(() => {
-        // Could add a success state here if needed
-      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to update record');
     } finally {
@@ -199,21 +193,21 @@ export default function NSFWDBManagerPage() {
   };
 
   // Navigate to previous/next record
-  const handlePreviousRecord = () => {
+  const handlePreviousRecord = useCallback(() => {
     if (!selectedRecord) return;
     const currentIndex = filteredRecords.findIndex(r => r.id === selectedRecord.id);
     if (currentIndex > 0) {
       setSelectedRecord(filteredRecords[currentIndex - 1]);
     }
-  };
+  }, [selectedRecord, filteredRecords]);
 
-  const handleNextRecord = () => {
+  const handleNextRecord = useCallback(() => {
     if (!selectedRecord) return;
     const currentIndex = filteredRecords.findIndex(r => r.id === selectedRecord.id);
     if (currentIndex < filteredRecords.length - 1) {
       setSelectedRecord(filteredRecords[currentIndex + 1]);
     }
-  };
+  }, [selectedRecord, filteredRecords]);
 
   // Keyboard navigation
   useEffect(() => {
@@ -234,7 +228,7 @@ export default function NSFWDBManagerPage() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedRecord, filteredRecords]);
+  }, [selectedRecord, filteredRecords, handlePreviousRecord, handleNextRecord]);
 
   // Create new record
   const handleCreateRecord = async () => {
