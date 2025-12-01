@@ -14,6 +14,9 @@ interface DraftGenerationRequest {
   queueSize?: number; // Maximum concurrent tasks (default: 5)
   followReferenceRatio?: boolean; // Match output dimensions to reference image aspect ratio (default: false)
   timingSettings?: TimingSettings; // Custom timing settings for polling
+  rangeStart?: number; // Start row (1-based, inclusive)
+  rangeEnd?: number; // End row (1-based, inclusive)
+  fillEmptyOnly?: boolean; // Only fill records that are missing image_1, image_2, or image_3
 }
 
 // Available dimension options for generation
@@ -151,6 +154,9 @@ export async function POST(request: Request) {
     queueSize = 5,
     followReferenceRatio = false,
     timingSettings,
+    rangeStart,
+    rangeEnd,
+    fillEmptyOnly = false,
   } = body;
 
   // Apply custom timing settings or use defaults
@@ -220,8 +226,25 @@ export async function POST(request: Request) {
 
         const airtableData = await airtableResponse.json();
 
-        // Filter records for draft generation
-        const recordsToProcess = airtableData.records.filter((record: AirtableRecord) => {
+        // Sort records by reference_image for consistent row numbering
+        const allRecords = airtableData.records.sort((a: AirtableRecord, b: AirtableRecord) => {
+          const aName = String(a.fields.reference_image || '');
+          const bName = String(b.fields.reference_image || '');
+          return aName.localeCompare(bName);
+        });
+
+        // Filter records for draft generation (with range filtering)
+        const recordsToProcess = allRecords.filter((record: AirtableRecord, index: number) => {
+          // Apply range filter if specified (1-based row numbers)
+          if (rangeStart !== undefined || rangeEnd !== undefined) {
+            const rowNumber = index + 1;
+            const start = rangeStart || 1;
+            const end = rangeEnd || allRecords.length;
+            if (rowNumber < start || rowNumber > end) {
+              return false;
+            }
+          }
+
           const initialPrompt = record.fields.initial_prompt;
           const hasPrompt = initialPrompt && String(initialPrompt).trim() !== '';
           const hasReference =
@@ -229,12 +252,24 @@ export async function POST(request: Request) {
             Array.isArray(record.fields.reference_image_attached) &&
             record.fields.reference_image_attached.length > 0;
 
+          // If fillEmptyOnly is true, only include records missing at least one image
+          if (fillEmptyOnly) {
+            const hasImage1 = record.fields.image_1 && Array.isArray(record.fields.image_1) && record.fields.image_1.length > 0;
+            const hasImage2 = record.fields.image_2 && Array.isArray(record.fields.image_2) && record.fields.image_2.length > 0;
+            const hasImage3 = record.fields.image_3 && Array.isArray(record.fields.image_3) && record.fields.image_3.length > 0;
+            const hasMissingImages = !hasImage1 || !hasImage2 || !hasImage3;
+            return hasPrompt && hasReference && hasMissingImages;
+          }
+
           return hasPrompt && hasReference;
         });
 
         if (recordsToProcess.length === 0) {
+          const rangeMsg = rangeStart || rangeEnd
+            ? ` in range ${rangeStart || 1}-${rangeEnd || allRecords.length}`
+            : '';
           sendEvent('complete', {
-            message: 'No records ready for draft generation',
+            message: `No records${rangeMsg} ready for draft generation`,
             processedCount: 0,
           });
           closeController();

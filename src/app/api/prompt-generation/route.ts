@@ -187,10 +187,12 @@ class GrokAPIClient {
 
 export async function POST(request: Request) {
   try {
-    const { tableName, recordIds, styleRules = [] } = await request.json() as {
+    const { tableName, recordIds, styleRules = [], rangeStart, rangeEnd } = await request.json() as {
       tableName: string;
       recordIds?: string[];
       styleRules?: StyleRule[];
+      rangeStart?: number;
+      rangeEnd?: number;
     };
 
     if (!tableName) {
@@ -267,11 +269,32 @@ export async function POST(request: Request) {
       return aName.localeCompare(bName);
     });
 
-    // Create a map of record IDs to row numbers (1-based)
+    // Create a map of record IDs to row numbers (1-based) BEFORE range filtering
     const recordRowMap = new Map<string, number>();
     recordsNeedingPrompts.forEach((record: { id: string }, index: number) => {
       recordRowMap.set(record.id, index + 1);
     });
+
+    // Apply range filtering if specified (filter by row position in the sorted list)
+    let filteredRecords = recordsNeedingPrompts;
+    if (rangeStart !== undefined || rangeEnd !== undefined) {
+      const start = rangeStart || 1;
+      const end = rangeEnd || recordsNeedingPrompts.length;
+      filteredRecords = recordsNeedingPrompts.filter((_: unknown, index: number) => {
+        const rowNumber = index + 1;
+        return rowNumber >= start && rowNumber <= end;
+      });
+    }
+
+    if (filteredRecords.length === 0) {
+      return NextResponse.json({
+        message: `No records found in range ${rangeStart || 1}-${rangeEnd || recordsNeedingPrompts.length} that need prompt generation`,
+        processedCount: 0
+      });
+    }
+
+    // Replace recordsNeedingPrompts with filtered records for processing
+    const recordsToProcess = filteredRecords;
 
     const results: Array<{
       recordId: string;
@@ -283,7 +306,7 @@ export async function POST(request: Request) {
     }> = [];
 
     // First, set status to "initial_request_sent" for all records to prevent duplicates
-    for (const record of recordsNeedingPrompts) {
+    for (const record of recordsToProcess) {
       try {
         await fetch(`https://api.airtable.com/v0/${baseId}/${tableName}/${record.id}`, {
           method: 'PATCH',
@@ -311,12 +334,12 @@ export async function POST(request: Request) {
         // Send initial progress
         sendProgress({
           type: 'start',
-          total: recordsNeedingPrompts.length,
+          total: recordsToProcess.length,
         });
 
         // Process each record
-        for (let index = 0; index < recordsNeedingPrompts.length; index++) {
-          const record = recordsNeedingPrompts[index];
+        for (let index = 0; index < recordsToProcess.length; index++) {
+          const record = recordsToProcess[index];
 
           try {
             // Get reference image URL
@@ -344,7 +367,7 @@ export async function POST(request: Request) {
               sendProgress({
                 type: 'progress',
                 current: index + 1,
-                total: recordsNeedingPrompts.length,
+                total: recordsToProcess.length,
                 recordId: record.id,
                 status: 'skipped',
                 message: 'No reference image found',
@@ -451,7 +474,7 @@ export async function POST(request: Request) {
             sendProgress({
               type: 'progress',
               current: index + 1,
-              total: recordsNeedingPrompts.length,
+              total: recordsToProcess.length,
               recordId: record.id,
               status: 'success',
             });
@@ -487,7 +510,7 @@ export async function POST(request: Request) {
             sendProgress({
               type: 'progress',
               current: index + 1,
-              total: recordsNeedingPrompts.length,
+              total: recordsToProcess.length,
               recordId: record.id,
               status: 'error',
               error: errorMessage,

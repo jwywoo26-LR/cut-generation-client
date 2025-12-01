@@ -106,6 +106,15 @@ export default function DashboardV2Page() {
   const [draftGenerationProgress, setDraftGenerationProgress] = useState<{current: number; total: number} | null>(null);
   const [draftGenerationError, setDraftGenerationError] = useState('');
   const [draftQueueSize, setDraftQueueSize] = useState(25);
+  const [isFillingEmptyImages, setIsFillingEmptyImages] = useState(false);
+
+  // Range filtering state for Initial Prompt Generation
+  const [initialPromptRangeStart, setInitialPromptRangeStart] = useState<number>(1);
+  const [initialPromptRangeEnd, setInitialPromptRangeEnd] = useState<number | null>(null);
+
+  // Range filtering state for Draft Generation
+  const [draftRangeStart, setDraftRangeStart] = useState<number>(1);
+  const [draftRangeEnd, setDraftRangeEnd] = useState<number | null>(null);
 
   // Restyle state
   const [restyleRules, setRestyleRules] = useState<RestyleRule[]>([]);
@@ -125,6 +134,9 @@ export default function DashboardV2Page() {
 
   // Timing settings state (shared between Draft Generation and Mass Generation)
   const [timingSettings, setTimingSettings] = useState<TimingSettings>(DEFAULT_TIMING_SETTINGS);
+
+  // Bulk image resize state
+  const [isResizingImages, setIsResizingImages] = useState(false);
 
   // Check if user is already authenticated
   useEffect(() => {
@@ -290,8 +302,21 @@ export default function DashboardV2Page() {
       return;
     }
 
-    // Count records that need prompts
-    const recordsNeedingPrompts = records.filter(record => {
+    // Validate range
+    const rangeStart = initialPromptRangeStart;
+    const rangeEnd = initialPromptRangeEnd || records.length;
+
+    if (rangeStart > rangeEnd) {
+      alert('Invalid range: "From Row" cannot be greater than "To Row"');
+      return;
+    }
+
+    // Count records that need prompts (for confirmation message)
+    const recordsNeedingPrompts = records.filter((record, index) => {
+      const rowNumber = index + 1;
+      if (rowNumber < rangeStart || rowNumber > rangeEnd) {
+        return false;
+      }
       const hasReference = record.fields.reference_image_attached &&
                           Array.isArray(record.fields.reference_image_attached) &&
                           (record.fields.reference_image_attached as unknown[]).length > 0;
@@ -300,22 +325,22 @@ export default function DashboardV2Page() {
       return hasReference && !hasInitialPrompt;
     });
 
-    if (recordsNeedingPrompts.length === 0) {
-      alert('No records found that need initial prompt generation. All records either already have prompts or are missing reference images.');
-      return;
-    }
-
     const rulesMessage = styleRules.length > 0
       ? `\n\nStyle rules configured: ${styleRules.length} rule(s) will be applied.`
       : '\n\nNo style rules configured (default tag generation).';
 
-    if (!confirm(`Generate initial prompts for ${recordsNeedingPrompts.length} records? This will analyze reference images using vision AI.${rulesMessage}`)) {
+    const rangeMessage = `(rows ${rangeStart}-${rangeEnd})`;
+    const estimatedCount = recordsNeedingPrompts.length > 0
+      ? `${recordsNeedingPrompts.length} records`
+      : 'records';
+
+    if (!confirm(`Generate initial prompts for ${estimatedCount} ${rangeMessage}? This will analyze reference images using vision AI.${rulesMessage}`)) {
       return;
     }
 
     setIsGeneratingInitialPrompts(true);
     setInitialPromptError('');
-    setInitialPromptProgress({ current: 0, total: recordsNeedingPrompts.length });
+    setInitialPromptProgress({ current: 0, total: recordsNeedingPrompts.length || 1 });
 
     // Convert StyleRule[] to API format (remove the 'id' field used for React keys)
     const apiStyleRules = styleRules.map(rule => {
@@ -342,22 +367,60 @@ export default function DashboardV2Page() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           tableName: selectedTableObj.name,
-          styleRules: apiStyleRules
+          styleRules: apiStyleRules,
+          rangeStart: initialPromptRangeStart,
+          rangeEnd: initialPromptRangeEnd || undefined,
         }),
       });
 
-      const data = await response.json();
-
-      if (response.ok) {
-        const successCount = data.results?.filter((r: { status: string }) => r.status === 'success').length || 0;
-        const errorCount = data.results?.filter((r: { status: string }) => r.status === 'error').length || 0;
-
-        alert(`Initial prompt generation complete!\n\nSuccessful: ${successCount}\nFailed: ${errorCount}`);
-        await loadRecords();
-      } else {
-        setInitialPromptError(data.error || 'Failed to generate prompts');
-        alert(`Failed to generate prompts: ${data.error || 'Unknown error'}`);
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start prompt generation');
       }
+
+      // Handle SSE stream
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Failed to get response reader');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let successCount = 0;
+      let errorCount = 0;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+
+        // Parse SSE events
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+
+              if (data.type === 'progress') {
+                setInitialPromptProgress({ current: data.current, total: data.total });
+              } else if (data.type === 'complete') {
+                successCount = data.successCount || 0;
+                errorCount = data.errorCount || 0;
+              } else if (data.type === 'error') {
+                setInitialPromptError(data.message);
+              }
+            } catch {
+              // Ignore parse errors
+            }
+          }
+        }
+      }
+
+      alert(`Initial prompt generation complete!\n\nSuccessful: ${successCount}\nFailed: ${errorCount}`);
+      await loadRecords();
     } catch (error) {
       console.error('Failed to generate initial prompts:', error);
       setInitialPromptError(error instanceof Error ? error.message : 'Unknown error');
@@ -623,6 +686,82 @@ export default function DashboardV2Page() {
       alert(`Failed to bulk update generation type: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setUpdatingGenerationTypeRecordId(null);
+    }
+  };
+
+  // ===== Bulk Copy Prompts Handler =====
+  const handleBulkCopyPrompts = async (copyMode: 'initial_to_restyle' | 'restyle_to_edit') => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    const sourceField = copyMode === 'initial_to_restyle' ? 'initial_prompt' : 'restyled_prompt';
+    const destField = copyMode === 'initial_to_restyle' ? 'restyled_prompt' : 'edit_prompt';
+
+    if (!confirm(`Copy all "${sourceField}" to "${destField}" for all records?\n\nThis will overwrite existing values in ${destField}.`)) {
+      return;
+    }
+
+    setUpdatingGenerationTypeRecordId('bulk-copy'); // Reuse as a loading indicator
+
+    try {
+      const response = await fetch('/api/airtable/bulk-copy-prompts', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          copyMode,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Successfully copied ${data.updatedCount} records from "${sourceField}" to "${destField}"`);
+        await loadRecords();
+      } else {
+        const data = await response.json();
+        alert(`Failed to copy prompts: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to bulk copy prompts:', error);
+      alert(`Failed to copy prompts: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setUpdatingGenerationTypeRecordId(null);
+    }
+  };
+
+  // Bulk resize images handler
+  const handleBulkResizeImages = async () => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) return;
+
+    if (!confirm('Resize all oversized reference images?\n\nThis will:\n• Keep original aspect ratio\n• Fit images to ~1024px (based on orientation)\n• Skip images already small enough\n• Update Airtable with resized images')) {
+      return;
+    }
+
+    setIsResizingImages(true);
+
+    try {
+      const response = await fetch('/api/airtable/bulk-resize-images', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Resized ${data.resizedCount} images (${data.skippedCount} skipped - already small enough)`);
+        await loadRecords();
+      } else {
+        const data = await response.json();
+        alert(`Failed to resize images: ${data.error || 'Unknown error'}`);
+      }
+    } catch (error) {
+      console.error('Failed to bulk resize images:', error);
+      alert(`Failed to resize images: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setIsResizingImages(false);
     }
   };
 
@@ -1008,8 +1147,21 @@ export default function DashboardV2Page() {
       return;
     }
 
-    // Count records ready for draft generation (has initial_prompt and reference_image_attached)
-    const recordsReadyForDraft = records.filter(record => {
+    // Validate range
+    const rangeStart = draftRangeStart;
+    const rangeEnd = draftRangeEnd || records.length;
+
+    if (rangeStart > rangeEnd) {
+      alert('Invalid range: "From Row" cannot be greater than "To Row"');
+      return;
+    }
+
+    // Count records ready for draft generation (has initial_prompt and reference_image_attached) within range
+    const recordsReadyForDraft = records.filter((record, index) => {
+      const rowNumber = index + 1;
+      if (rowNumber < rangeStart || rowNumber > rangeEnd) {
+        return false;
+      }
       const hasPrompt = record.fields.initial_prompt &&
                         String(record.fields.initial_prompt).trim() !== '';
       const hasReference = record.fields.reference_image_attached &&
@@ -1019,13 +1171,14 @@ export default function DashboardV2Page() {
     });
 
     if (recordsReadyForDraft.length === 0) {
-      setDraftGenerationError('No records found ready for draft generation. Records need initial_prompt and reference_image_attached.');
+      setDraftGenerationError(`No records found in range ${rangeStart}-${rangeEnd} ready for draft generation. Records need initial_prompt and reference_image_attached.`);
       return;
     }
 
     const totalGenerations = recordsReadyForDraft.length * 3; // 3 variations per record
+    const rangeMessage = `(rows ${rangeStart}-${rangeEnd})`;
 
-    if (!confirm(`Generate draft images for ${recordsReadyForDraft.length} records (${totalGenerations} total images)?\n\nThis will fill image_1, image_2, image_3 columns.\n\nNote: This ignores regenerate_status and always regenerates.`)) {
+    if (!confirm(`Generate draft images for ${recordsReadyForDraft.length} records ${rangeMessage} (${totalGenerations} total images)?\n\nThis will fill image_1, image_2, image_3 columns.\n\nNote: This ignores regenerate_status and always regenerates.`)) {
       return;
     }
 
@@ -1042,6 +1195,8 @@ export default function DashboardV2Page() {
           queueSize: draftQueueSize,
           followReferenceRatio: true, // Always follow reference ratio for draft generation
           timingSettings,
+          rangeStart,
+          rangeEnd: draftRangeEnd || undefined,
         }),
       });
 
@@ -1127,6 +1282,154 @@ export default function DashboardV2Page() {
       setDraftGenerationError(error instanceof Error ? error.message : 'Unknown error');
     } finally {
       setIsGeneratingDraft(false);
+      setDraftGenerationProgress(null);
+    }
+  };
+
+  // Fill Empty Images handler - only generates for records missing image_1, image_2, or image_3
+  const handleFillEmptyImages = async () => {
+    const selectedTableObj = tables.find(t => t.id === selectedTable);
+    if (!selectedTableObj) {
+      setDraftGenerationError('No table selected');
+      return;
+    }
+
+    // Validate range
+    const rangeStart = draftRangeStart;
+    const rangeEnd = draftRangeEnd || records.length;
+
+    if (rangeStart > rangeEnd) {
+      alert('Invalid range: "From Row" cannot be greater than "To Row"');
+      return;
+    }
+
+    // Count records that have prompt + reference but are missing at least one image
+    const recordsWithEmptyImages = records.filter((record, index) => {
+      const rowNumber = index + 1;
+      if (rowNumber < rangeStart || rowNumber > rangeEnd) {
+        return false;
+      }
+      const hasPrompt = record.fields.initial_prompt &&
+                        String(record.fields.initial_prompt).trim() !== '';
+      const hasReference = record.fields.reference_image_attached &&
+                          Array.isArray(record.fields.reference_image_attached) &&
+                          (record.fields.reference_image_attached as unknown[]).length > 0;
+
+      // Check if any of image_1, image_2, image_3 are empty
+      const hasImage1 = record.fields.image_1 &&
+                        Array.isArray(record.fields.image_1) &&
+                        (record.fields.image_1 as unknown[]).length > 0;
+      const hasImage2 = record.fields.image_2 &&
+                        Array.isArray(record.fields.image_2) &&
+                        (record.fields.image_2 as unknown[]).length > 0;
+      const hasImage3 = record.fields.image_3 &&
+                        Array.isArray(record.fields.image_3) &&
+                        (record.fields.image_3 as unknown[]).length > 0;
+
+      const hasMissingImages = !hasImage1 || !hasImage2 || !hasImage3;
+
+      return hasPrompt && hasReference && hasMissingImages;
+    });
+
+    if (recordsWithEmptyImages.length === 0) {
+      alert(`No records found in range ${rangeStart}-${rangeEnd} with empty images.\n\nAll records either:\n• Already have all 3 images, or\n• Are missing initial_prompt/reference_image`);
+      return;
+    }
+
+    const totalGenerations = recordsWithEmptyImages.length * 3;
+    const rangeMessage = `(rows ${rangeStart}-${rangeEnd})`;
+
+    if (!confirm(`Fill empty images for ${recordsWithEmptyImages.length} records ${rangeMessage}?\n\nThis will only generate for records missing image_1, image_2, or image_3.\n\nTotal generations: up to ${totalGenerations}`)) {
+      return;
+    }
+
+    setIsFillingEmptyImages(true);
+    setDraftGenerationError('');
+    setDraftGenerationProgress({ current: 0, total: totalGenerations });
+
+    try {
+      const response = await fetch('/api/draft-generation', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          tableName: selectedTableObj.name,
+          queueSize: draftQueueSize,
+          rangeStart,
+          rangeEnd,
+          fillEmptyOnly: true, // New flag to only fill empty slots
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to start fill empty images');
+      }
+
+      // Handle SSE stream (same as draft generation)
+      const reader = response.body?.getReader();
+      if (!reader) {
+        throw new Error('Failed to get response reader');
+      }
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+      let lastProgressTime = Date.now();
+      const CONNECTION_TIMEOUT = 60000;
+
+      const connectionMonitor = setInterval(() => {
+        const timeSinceLastProgress = Date.now() - lastProgressTime;
+        if (timeSinceLastProgress > CONNECTION_TIMEOUT) {
+          console.warn('⚠️ No updates for 60 seconds - connection may be lost');
+          setDraftGenerationError('⚠️ Live updates paused. Generation is still running on server! Refresh the page to see progress.');
+          clearInterval(connectionMonitor);
+          reader.cancel();
+        }
+      }, 10000);
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          lastProgressTime = Date.now();
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            if (line.startsWith('event: ')) {
+              const eventType = line.slice(7);
+              const dataLine = lines[i + 1];
+              if (dataLine && dataLine.startsWith('data: ')) {
+                try {
+                  const data = JSON.parse(dataLine.slice(6));
+
+                  if (eventType === 'progress') {
+                    setDraftGenerationProgress({ current: data.current, total: data.total });
+                  } else if (eventType === 'complete') {
+                    alert(`Fill empty images complete!\n\nRecords processed: ${data.processedCount}\nTotal generations: ${data.totalGenerations}\nSuccessful: ${data.successCount}`);
+                    await loadRecords();
+                  } else if (eventType === 'error') {
+                    setDraftGenerationError(data.message);
+                  }
+                } catch {
+                  // Ignore parse errors
+                }
+                i++; // Skip data line
+              }
+            }
+          }
+        }
+      } finally {
+        clearInterval(connectionMonitor);
+      }
+    } catch (error) {
+      console.error('Failed to fill empty images:', error);
+      setDraftGenerationError(error instanceof Error ? error.message : 'Unknown error');
+    } finally {
+      setIsFillingEmptyImages(false);
       setDraftGenerationProgress(null);
     }
   };
@@ -1656,6 +1959,9 @@ export default function DashboardV2Page() {
                       onStatusChange={handleStatusChange}
                       onGenerationTypeChange={handleGenerationTypeChange}
                       onBulkGenerationTypeChange={handleBulkGenerationTypeChange}
+                      onBulkCopyPrompts={handleBulkCopyPrompts}
+                      onBulkResizeImages={handleBulkResizeImages}
+                      isResizingImages={isResizingImages}
                     />
                   )}
 
@@ -1665,6 +1971,10 @@ export default function DashboardV2Page() {
                       styleRules={styleRules}
                       onStyleRulesChange={setStyleRules}
                       maxRows={records.length || 100}
+                      initialPromptRangeStart={initialPromptRangeStart}
+                      initialPromptRangeEnd={initialPromptRangeEnd}
+                      onInitialPromptRangeStartChange={setInitialPromptRangeStart}
+                      onInitialPromptRangeEndChange={setInitialPromptRangeEnd}
                       isGeneratingInitialPrompts={isGeneratingInitialPrompts}
                       initialPromptProgress={initialPromptProgress}
                       initialPromptError={initialPromptError}
@@ -1702,6 +2012,13 @@ export default function DashboardV2Page() {
                       draftQueueSize={draftQueueSize}
                       onDraftQueueSizeChange={setDraftQueueSize}
                       onDraftGeneration={handleDraftGeneration}
+                      onFillEmptyImages={handleFillEmptyImages}
+                      isFillingEmptyImages={isFillingEmptyImages}
+                      draftRangeStart={draftRangeStart}
+                      draftRangeEnd={draftRangeEnd}
+                      onDraftRangeStartChange={setDraftRangeStart}
+                      onDraftRangeEndChange={setDraftRangeEnd}
+                      maxRows={records.length || 100}
                       isGeneratingWithMiro={isGeneratingWithMiro}
                       miroGenerationProgress={miroGenerationProgress}
                       miroGenerationError={miroGenerationError}

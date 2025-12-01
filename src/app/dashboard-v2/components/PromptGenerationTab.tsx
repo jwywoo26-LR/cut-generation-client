@@ -10,6 +10,12 @@ interface PromptGenerationTabProps {
   onStyleRulesChange: (rules: StyleRule[]) => void;
   maxRows: number;
 
+  // Range filtering state for initial prompt generation
+  initialPromptRangeStart: number;
+  initialPromptRangeEnd: number | null;
+  onInitialPromptRangeStartChange: (value: number) => void;
+  onInitialPromptRangeEndChange: (value: number | null) => void;
+
   // Prompt generation state
   isGeneratingInitialPrompts: boolean;
   initialPromptProgress: { current: number; total: number } | null;
@@ -50,6 +56,10 @@ export function PromptGenerationTab({
   styleRules,
   onStyleRulesChange,
   maxRows,
+  initialPromptRangeStart,
+  initialPromptRangeEnd,
+  onInitialPromptRangeStartChange,
+  onInitialPromptRangeEndChange,
   isGeneratingInitialPrompts,
   initialPromptProgress,
   initialPromptError,
@@ -122,6 +132,40 @@ export function PromptGenerationTab({
               {styleRules.length} style rule(s) will be applied during generation
             </div>
           )}
+
+          {/* Range Filter */}
+          <div className="flex items-center gap-4 p-3 bg-gray-100 dark:bg-gray-800 rounded-md">
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600 dark:text-gray-400">From Row:</label>
+              <input
+                type="number"
+                min={1}
+                max={maxRows}
+                value={initialPromptRangeStart}
+                onChange={(e) => onInitialPromptRangeStartChange(Math.max(1, parseInt(e.target.value) || 1))}
+                className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label className="text-sm text-gray-600 dark:text-gray-400">To Row:</label>
+              <input
+                type="number"
+                min={1}
+                max={maxRows}
+                value={initialPromptRangeEnd || ''}
+                placeholder="All"
+                onChange={(e) => {
+                  const value = parseInt(e.target.value);
+                  onInitialPromptRangeEndChange(isNaN(value) ? null : Math.min(value, maxRows));
+                }}
+                className="w-20 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+            </div>
+            <span className="text-xs text-gray-500 dark:text-gray-400">
+              Total: {maxRows} records
+            </span>
+          </div>
+
           {initialPromptError && (
             <div className="p-2 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded text-xs">
               {initialPromptError}
