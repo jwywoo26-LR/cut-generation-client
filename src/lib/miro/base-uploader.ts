@@ -124,7 +124,7 @@ export abstract class BaseMiroUploader {
     width: number,
     height: number,
     fillColor: string = '#ffffff',
-    fontSize: number = 12,
+    _fontSize: number = 12,
     bold: boolean = false
   ): Promise<boolean> {
     if (!this.boardId) {
@@ -215,7 +215,7 @@ export abstract class BaseMiroUploader {
 
     for (let i = 1; i < lines.length; i++) {
       const values = lines[i].split(',');
-      const product: any = {};
+      const product: Record<string, string | number | boolean> = {};
 
       headers.forEach((header, idx) => {
         const value = values[idx]?.trim() || '';
@@ -229,7 +229,7 @@ export abstract class BaseMiroUploader {
         }
       });
 
-      products.push(product as Product);
+      products.push(product as unknown as Product);
       this.stats.totalProducts++;
     }
 
